@@ -1,0 +1,32 @@
+input_directory : "/mnt/n/AudioWalks/H3-VC/2025-6-20_to_7-31/"
+
+# Audio parameters
+sample_rate: 48000
+file_duration_sec: 900
+
+# Display parameters
+width-px : 1000
+height-px : 300
+border-px : 0
+dpi : 100
+
+# Spectrogram parameters
+n_fft : 2048
+hop_length : 256
+n_mels : 128
+
+# Global contrast normalization range
+global_min : -40
+global_max : 40
+
+# Acoustic indices configuration - WORKING INDICES ONLY
+acoustic_indices:
+  temporal:
+    enabled: ["temporal_entropy", "temporal_activity", "temporal_median"]
+    chunk_duration_sec: 4.5
+  spectral:
+    enabled: ["acoustic_complexity_index", "bioacoustics_index", "soundscape_index", "spectral_entropy", "frequency_entropy"]
+    chunk_duration_sec: 4.5
+    # Frequency range for bioacoustics_index (Hz) - customize for target species
+    bioacoustics_freq_min: 500    # Lower bound for target species
+    bioacoustics_freq_max: 2000   # Upper bound for target species
