@@ -286,6 +286,51 @@ def api_available_times():
     
     return jsonify(data)
 
+@app.route('/api/mel_scale')
+def api_mel_scale():
+    """Get mel scale frequency mapping for spectrograms."""
+    import numpy as np
+    
+    # Default AudioMoth sampling rate is 48kHz
+    sample_rate = int(request.args.get('sample_rate', 48000))
+    n_mels = int(request.args.get('n_mels', 128))
+    fmin = float(request.args.get('fmin', 0))
+    fmax = float(request.args.get('fmax', sample_rate // 2))
+    
+    # Convert Hz to mel scale
+    def hz_to_mel(hz):
+        return 2595 * np.log10(1 + hz / 700)
+    
+    # Convert mel scale to Hz
+    def mel_to_hz(mel):
+        return 700 * (10**(mel / 2595) - 1)
+    
+    # Create mel scale points
+    mel_min = hz_to_mel(fmin)
+    mel_max = hz_to_mel(fmax)
+    mel_points = np.linspace(mel_min, mel_max, n_mels + 1)
+    
+    # Convert back to Hz
+    freq_points = [mel_to_hz(mel) for mel in mel_points]
+    
+    # Create mapping for pixel positions (assuming spectrogram height matches n_mels)
+    scale_data = []
+    for i, freq in enumerate(freq_points):
+        pixel_y = i  # Y position from bottom of spectrogram
+        scale_data.append({
+            'pixel_y': pixel_y,
+            'frequency_hz': round(freq, 1),
+            'frequency_khz': round(freq / 1000, 2)
+        })
+    
+    return jsonify({
+        'scale_data': scale_data,
+        'sample_rate': sample_rate,
+        'n_mels': n_mels,
+        'fmin': fmin,
+        'fmax': fmax
+    })
+
 @app.route('/api/upload_labels', methods=['POST'])
 def upload_labels():
     """Upload Audacity label file."""
