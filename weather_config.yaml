@@ -1,0 +1,48 @@
+# Weather integration configuration for AudioMoth bioacoustic analysis
+database_path: "audiomoth.db"
+
+weather:
+  enabled: true
+  cache_directory: ".weather_cache"
+  api_provider: "open-meteo"
+  
+  # Weather variables to fetch (optimized for bioacoustic research)
+  variables:
+    - temperature_2m           # °C - Primary activity driver for wildlife
+    - relative_humidity_2m     # % - Critical for insect activity patterns
+    - precipitation           # mm - Can mask acoustic signals
+    - wind_speed_10m          # km/h - Affects recording quality
+    - weather_code            # WMO code - Overall weather conditions
+    - cloud_cover             # % - Affects nighttime cooling
+    - pressure_msl            # hPa - Influences animal behavior
+  
+  # Temporal alignment settings
+  temporal:
+    resolution: "hourly"       # Match Open-Meteo data resolution
+    timezone_handling: "auto"  # Let Open-Meteo detect local timezone
+    interpolation: "nearest"   # Round AudioMoth recordings to nearest hour
+  
+  # Recording sites configuration
+  sites:
+    # H3-VC site - coordinates extracted from photos
+    - name: "H3-VC"
+      photo_path: "/home/matt/project/audiosearch/weather/PXL_20250731_051433524.jpg"
+      # Coordinates will be auto-extracted from photo EXIF
+      
+    # Manual site example (if needed)
+    # - name: "Site_Manual"
+    #   latitude: -33.8688
+    #   longitude: 151.2093
+  
+  # Recording period for weather data fetch
+  date_range:
+    start_date: "2025-06-20"
+    end_date: "2025-07-31"
+  
+  # Weather-acoustic correlation thresholds
+  thresholds:
+    high_wind_speed: 15.0      # km/h - Flag recordings with excessive wind
+    heavy_precipitation: 5.0   # mm/h - Mark weather-impacted recordings
+    temperature_range:         # °C - Optimal recording conditions
+      min: 5.0
+      max: 35.0

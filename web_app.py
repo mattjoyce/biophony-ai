@@ -234,6 +234,63 @@ def api_file_info():
         'filename': filename
     })
 
+@app.route('/api/weather')
+def api_weather():
+    """Get weather data for given date and time."""
+    import sqlite3
+    
+    date = request.args.get('date', '2025-06-20')
+    time = request.args.get('time', '00:00')
+    
+    # Convert to datetime format for weather lookup
+    datetime_str = f"{date} {time}:00"
+    
+    conn = sqlite3.connect(db.db_path)
+    cursor = conn.cursor()
+    
+    # First, try to get weather data from audio file's weather_id
+    cursor.execute("""
+        SELECT wd.temperature_2m, wd.relative_humidity_2m, wd.precipitation, 
+               wd.wind_speed_10m, wd.weather_code, wd.cloud_cover, wd.pressure_msl
+        FROM audio_files af
+        JOIN weather_data wd ON af.weather_id = wd.id
+        WHERE DATE(af.recording_datetime) = ? 
+        AND TIME(af.recording_datetime) = ?
+        LIMIT 1
+    """, (date, f"{time}:00"))
+    
+    result = cursor.fetchone()
+    
+    if not result:
+        # Fallback: find closest weather data by datetime
+        cursor.execute("""
+            SELECT temperature_2m, relative_humidity_2m, precipitation, 
+                   wind_speed_10m, weather_code, cloud_cover, pressure_msl
+            FROM weather_data 
+            WHERE datetime <= ?
+            ORDER BY ABS(julianday(datetime) - julianday(?)) ASC
+            LIMIT 1
+        """, (datetime_str, datetime_str))
+        
+        result = cursor.fetchone()
+    
+    conn.close()
+    
+    if not result:
+        return jsonify({'error': f'No weather data found for {date} {time}'}), 404
+    
+    temperature, humidity, precipitation, wind_speed, weather_code, cloud_cover, pressure = result
+    
+    return jsonify({
+        'temperature': round(temperature, 1) if temperature else None,
+        'humidity': round(humidity, 1) if humidity else None,
+        'precipitation': round(precipitation, 1) if precipitation else None,
+        'wind_speed': round(wind_speed, 1) if wind_speed else None,
+        'weather_code': weather_code,
+        'cloud_cover': round(cloud_cover, 1) if cloud_cover else None,
+        'pressure': round(pressure, 1) if pressure else None
+    })
+
 @app.route('/api/colormap/<colormap_name>')
 def api_colormap(colormap_name):
     """Get matplotlib colormap as JSON array."""
@@ -330,6 +387,34 @@ def api_mel_scale():
         'fmin': fmin,
         'fmax': fmax
     })
+
+@app.route('/api/audio/<filename>')
+def serve_audio(filename):
+    """Serve WAV audio files with proper headers for streaming."""
+    # Query database for file path
+    conn = sqlite3.connect(db.db_path)
+    cursor = conn.cursor()
+    
+    cursor.execute("SELECT filepath FROM audio_files WHERE filename = ?", (filename,))
+    result = cursor.fetchone()
+    conn.close()
+    
+    if not result:
+        return jsonify({'error': 'Audio file not found'}), 404
+    
+    filepath = result[0]
+    
+    # Verify file exists
+    if not os.path.exists(filepath):
+        return jsonify({'error': 'Audio file not accessible'}), 404
+    
+    # Serve with appropriate headers for large files
+    return send_file(
+        filepath, 
+        mimetype='audio/wav',
+        as_attachment=False,
+        conditional=True  # Enable range requests for seeking
+    )
 
 @app.route('/api/upload_labels', methods=['POST'])
 def upload_labels():

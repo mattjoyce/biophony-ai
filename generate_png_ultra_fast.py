@@ -11,6 +11,7 @@ import argparse
 import time
 from PIL import Image
 from pathlib import Path
+from filelock import FileLock, Timeout
 from spectrogram_utils import find_all_spectrogram_files, load_spectrogram
 
 def parse_arguments():
@@ -117,7 +118,14 @@ def main():
         file_start_time = time.time()
         print(f"[{target_name}] [{i:4d}/{len(npz_files)}] {os.path.basename(npz_file)}...", end=" ")
         
-        result = create_ultra_fast_png(npz_file, config, args.force)
+        # Try to acquire file lock - skip immediately if locked
+        lock_path = f"{npz_file}.lock"
+        try:
+            with FileLock(lock_path, timeout=0):
+                result = create_ultra_fast_png(npz_file, config, args.force)
+        except Timeout:
+            # File is locked by another process, skip it
+            result = "locked"
         
         file_end_time = time.time()
         file_duration = file_end_time - file_start_time
@@ -128,6 +136,9 @@ def main():
         elif result == "exists":
             exists += 1
             print(f"(exists) ({file_duration:.3f}s)")
+        elif result == "locked":
+            print(f"(locked) ({file_duration:.3f}s)")
+            continue
         else:
             errors += 1
             print(f"✗ {result} ({file_duration:.3f}s)")

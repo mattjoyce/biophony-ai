@@ -14,16 +14,27 @@ import yaml
 import argparse
 import time
 import gc
+import sqlite3
+from pathlib import Path
+from filelock import FileLock, Timeout
 from spectrogram_utils import save_spectrogram, create_mel_frequency_vector, create_time_vector, find_all_wav_files
 
 def parse_arguments():
-    """Parse command line arguments"""
-    parser = argparse.ArgumentParser(description="Generate spectrograms using GPU (optimized)")
-    parser.add_argument("--input", "-i", help="Input directory with audio files (overrides config)")
-    parser.add_argument("--single-file", "-s", help="Process a single WAV file instead of directory")
+    """Parse command line arguments with comprehensive options"""
+    parser = argparse.ArgumentParser(description="Generate spectrograms using GPU with integrated statistics calculation")
+    
+    # Required arguments
     parser.add_argument("--config", "-c", required=True, help="YAML configuration file")
-    parser.add_argument("--target", type=int, nargs='+', help="Target subset(s) (not used with --single-file)")
+    
+    # Input handling
+    parser.add_argument("--input", "-i", help="Input directory with audio files (optional - uses input_directory from config if not provided)")
+    parser.add_argument("--single-file", "-s", help="Process a single WAV file instead of directory")
+    
+    # Processing options
+    parser.add_argument("--target", type=int, nargs='+', help="Target subset(s): e.g. --target 0 1 2 (not used with --single-file)")
     parser.add_argument("--force", "-f", action="store_true", help="Force regeneration of existing NPZ files")
+    parser.add_argument("--dry-run", action="store_true", help="Show what would be processed without actually doing any work")
+    
     return parser.parse_args()
 
 def load_config(config_path):
@@ -41,6 +52,141 @@ def setup_gpu():
     else:
         print("✗ CUDA not available, using CPU")
         return torch.device("cpu")
+
+
+def setup_database_schema(config):
+    """Add spectrogram statistics columns to database if they don't exist"""
+    db_path = config.get('database_path')
+    if not db_path:
+        raise ValueError("❌ No database_path specified in config file")
+    
+    db_file = Path(db_path)
+    if not db_file.exists():
+        raise FileNotFoundError(f"❌ Database file not found: {db_path}")
+    
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        
+        # Add columns for per-file spectrogram statistics
+        columns_to_add = [
+            ('spectrogram_min_abs', 'REAL'),
+            ('spectrogram_max_abs', 'REAL'), 
+            ('spectrogram_min_p2', 'REAL'),
+            ('spectrogram_max_p98', 'REAL')
+        ]
+        
+        for column_name, column_type in columns_to_add:
+            try:
+                cursor.execute(f'ALTER TABLE audio_files ADD COLUMN {column_name} {column_type}')
+                print(f"✓ Added {column_name} column to database")
+            except sqlite3.OperationalError:
+                pass  # Column already exists
+        
+        conn.commit()
+        conn.close()
+    except sqlite3.Error as e:
+        print(f"⚠️ Database schema update failed: {e}")
+
+
+def store_file_statistics(filepath, stats, config):
+    """Store per-file spectrogram statistics in database"""
+    db_path = config.get('database_path')
+    if not db_path:
+        raise ValueError("❌ No database_path specified in config file")
+    
+    db_file = Path(db_path)
+    if not db_file.exists():
+        raise FileNotFoundError(f"❌ Database file not found: {db_path}")
+    
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+        UPDATE audio_files 
+        SET spectrogram_min_abs = ?, spectrogram_max_abs = ?, 
+            spectrogram_min_p2 = ?, spectrogram_max_p98 = ?
+        WHERE filepath = ?
+        ''', (stats['min_abs'], stats['max_abs'], stats['min_p2'], stats['max_p98'], filepath))
+        
+        conn.commit() 
+        conn.close()
+    except sqlite3.Error as e:
+        print(f"⚠️ Failed to store statistics for {os.path.basename(filepath)}: {e}")
+
+
+def calculate_global_statistics(config):
+    """Calculate and store global statistics from all per-file values"""
+    db_path = config.get('database_path')
+    if not db_path:
+        raise ValueError("❌ No database_path specified in config file")
+    
+    db_file = Path(db_path)
+    if not db_file.exists():
+        raise FileNotFoundError(f"❌ Database file not found: {db_path}")
+    
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        
+        # Get all min/max values to calculate global percentiles
+        cursor.execute('''
+        SELECT spectrogram_min_abs, spectrogram_max_abs, spectrogram_min_p2, spectrogram_max_p98
+        FROM audio_files 
+        WHERE spectrogram_min_abs IS NOT NULL AND spectrogram_max_abs IS NOT NULL
+        ''')
+        all_values = cursor.fetchall()
+        
+        if not all_values:
+            print("⚠️ No per-file spectrogram statistics found")
+            conn.close()
+            return
+        
+        # Flatten all values for global percentile calculation
+        all_db_values = []
+        for row in all_values:
+            all_db_values.extend(row)  # Add all 4 values from each file
+        
+        # Calculate global percentiles for better contrast
+        global_min = np.percentile(all_db_values, 2)   # 2nd percentile
+        global_max = np.percentile(all_db_values, 98)  # 98th percentile
+        
+        # Also calculate absolute range for comparison
+        abs_min = min(all_db_values)
+        abs_max = max(all_db_values)
+        
+        print(f"\n📊 Global Statistics from {len(all_values)} files:")
+        print(f"  Absolute range: {abs_min:.2f} to {abs_max:.2f} dB ({abs_max - abs_min:.1f} dB)")
+        print(f"  Percentile range (2%-98%): {global_min:.2f} to {global_max:.2f} dB ({global_max - global_min:.1f} dB)")
+        
+        # Create or update global_stats table
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS global_stats (
+            id INTEGER PRIMARY KEY,
+            stat_name TEXT UNIQUE,
+            stat_value REAL,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+        ''')
+        
+        # Insert or update global min/max
+        cursor.execute('''
+        INSERT OR REPLACE INTO global_stats (id, stat_name, stat_value, updated_at)
+        VALUES (1, 'global_min', ?, CURRENT_TIMESTAMP)
+        ''', (global_min,))
+        
+        cursor.execute('''
+        INSERT OR REPLACE INTO global_stats (id, stat_name, stat_value, updated_at)
+        VALUES (2, 'global_max', ?, CURRENT_TIMESTAMP)
+        ''', (global_max,))
+        
+        conn.commit()
+        conn.close()
+        print("✓ Global statistics updated in database")
+        
+    except sqlite3.Error as e:
+        print(f"⚠️ Failed to calculate global statistics: {e}")
 
 
 def process_single_file(audio_file, mel_transform, config, device, freq_vector, force=False):
@@ -69,6 +215,15 @@ def process_single_file(audio_file, mel_transform, config, device, freq_vector, 
         if len(mel_spec_db.shape) == 3:
             mel_spec_db = mel_spec_db[0]  # Remove batch dimension
         
+        # Calculate spectrogram statistics
+        mel_flat = mel_spec_db.flatten()
+        stats = {
+            'min_abs': float(np.min(mel_flat)),
+            'max_abs': float(np.max(mel_flat)),
+            'min_p2': float(np.percentile(mel_flat, 2)),
+            'max_p98': float(np.percentile(mel_flat, 98))
+        }
+        
         # Create time vector
         hop_length = config.get('hop_length', 256)
         time_bins = create_time_vector(mel_spec_db.shape[1], hop_length, sample_rate)
@@ -88,6 +243,9 @@ def process_single_file(audio_file, mel_transform, config, device, freq_vector, 
             normalization=False
         )
         
+        # Store statistics in database
+        store_file_statistics(audio_file, stats, config)
+        
         # Cleanup
         del waveform, mel_spec, mel_spec_db
         
@@ -103,6 +261,9 @@ def main():
     # Setup
     device = setup_gpu()
     config = load_config(args.config)
+    
+    # Setup database schema for statistics
+    setup_database_schema(config)
     
     # Create frequency vector for mel scale
     n_fft = config.get('n_fft', 2048)
@@ -122,17 +283,21 @@ def main():
     else:
         # Directory mode (original logic)
         if not args.target:
-            raise ValueError("--target is required when processing directories")
+            print("❌ --target is required when processing directories")
+            return
             
-        # Determine input directory: CLI argument overrides config
+        # Determine input directory: use --input if provided, otherwise fall back to config
         if args.input:
             input_dir = args.input
-            print(f"✓ Using CLI input directory: {input_dir}")
-        elif 'input_directory' in config:
-            input_dir = config['input_directory']
-            print(f"✓ Using config input directory: {input_dir}")
+            input_source = "command line"
         else:
-            raise ValueError("No input directory specified. Use --input or add 'input_directory' to config.")
+            input_dir = config.get('input_directory')
+            if not input_dir:
+                print("❌ No input directory specified. Use --input or set input_directory in config file.")
+                return
+            input_source = "config file"
+        
+        print(f"Input directory: {input_dir} (from {input_source})")
         
         # Find files
         print("Finding WAV files...")
@@ -151,6 +316,18 @@ def main():
     
     if not wav_files:
         print("No WAV files found!")
+        return
+    
+    # Show dry-run information if enabled
+    if args.dry_run:
+        print(f"\n🔍 DRY-RUN MODE: {len(wav_files)} files would be processed")
+        print("  Operations that would be performed:")
+        print("  - Generate mel spectrograms using GPU")
+        print("  - Calculate 4 statistics per file (abs min/max, 2nd/98th percentiles)")
+        print("  - Save NPZ files with spectral data")
+        print("  - Store statistics in database")
+        print("  - Calculate global statistics")
+        print("🚀 Use without --dry-run to execute actual processing")
         return
     
     # Create mel transform
@@ -173,7 +350,14 @@ def main():
         file_start_time = time.time()
         print(f"[{target_name}] [{i:4d}/{len(wav_files)}] {os.path.basename(wav_file)}...", end=" ")
         
-        result = process_single_file(wav_file, mel_transform, config, device, freq_vector, args.force)
+        # Try to acquire file lock - skip immediately if locked
+        lock_path = f"{wav_file}.lock"
+        try:
+            with FileLock(lock_path, timeout=0):
+                result = process_single_file(wav_file, mel_transform, config, device, freq_vector, args.force)
+        except Timeout:
+            # File is locked by another process, skip it
+            result = "locked"
         
         file_end_time = time.time()
         file_duration = file_end_time - file_start_time
@@ -184,6 +368,9 @@ def main():
         elif result == "exists":
             exists += 1
             print(f"(exists) ({file_duration:.1f}s)")
+        elif result == "locked":
+            print(f"(locked) ({file_duration:.3f}s)")
+            continue
         else:
             errors += 1
             print(f"✗ {result} ({file_duration:.1f}s)")
@@ -208,6 +395,11 @@ def main():
     
     print(f"\n🎉 [{target_name}] Complete! {len(wav_files)} files in {elapsed/60:.1f} minutes ({rate:.1f} files/sec)")
     print(f"[{target_name}] Created: {created} NPZ files, Exists: {exists}, Errors: {errors}")
+    
+    # Calculate global statistics from all processed files
+    if created > 0:
+        print(f"\n📊 Calculating global statistics...")
+        calculate_global_statistics(config)
 
 if __name__ == "__main__":
     main()

@@ -10,7 +10,9 @@ import argparse
 import time
 import gc
 import os
+from pathlib import Path
 from typing import List
+from filelock import FileLock, Timeout
 
 from indices import TemporalIndicesProcessor, SpectralIndicesProcessor, DatabaseManager
 from spectrogram_utils import find_all_wav_files
@@ -21,7 +23,7 @@ def parse_arguments():
     parser = argparse.ArgumentParser(description="Process acoustic indices from audio/spectrogram files")
     parser.add_argument("--input", "-i", help="Input directory with files (optional - uses input_directory from config if not provided)")
     parser.add_argument("--config", "-c", required=True, help="YAML configuration file")
-    parser.add_argument("--target", type=int, nargs='+', required=True, help="Target subset(s): e.g. --target 0 1 2")
+    parser.add_argument("--target", type=int, nargs='+', help="Target subset(s): e.g. --target 0 1 2 (defaults to all 0-9)")
     parser.add_argument("--force", action="store_true", help="Force reprocessing of existing files")
     parser.add_argument("--dry-run", action="store_true", help="Show what would be processed without actually doing any work")
     
@@ -139,8 +141,17 @@ def create_dry_run_report(processing_type: str, config: dict, target_files: List
 
 def process_temporal_files(files: List[str], config: dict, target_name: str, force: bool = False, dry_run: bool = False) -> tuple:
     """Process temporal indices from WAV files"""
+    # Get database path from config
+    db_path = config.get('database_path')
+    if not db_path:
+        raise ValueError("❌ No database_path specified in config file")
+    
+    db_file = Path(db_path)
+    if not db_file.exists():
+        raise FileNotFoundError(f"❌ Database file not found: {db_path}")
+    
     processor = TemporalIndicesProcessor(config)
-    db_manager = DatabaseManager()
+    db_manager = DatabaseManager(db_path)
     
     # Get the specific indices that would be created by this processor
     # Temporal indices typically use their cosmetic name as database name
@@ -162,43 +173,52 @@ def process_temporal_files(files: List[str], config: dict, target_name: str, for
         file_start_time = time.time()
         print(f"[{target_name}] [{i:4d}/{len(files)}] {os.path.basename(wav_file)}...", end=" ")
         
-        # Check if the specific indices we want to create already exist (using preloaded data)
-        existing_indices = existing_indices_bulk.get(wav_file, {})
-        indices_exist = len(existing_indices) > 0
-        
-        if indices_exist and not force:
-            exists += 1
+        # Try to acquire file lock - skip immediately if locked
+        lock_path = f"{wav_file}.lock"
+        try:
+            with FileLock(lock_path, timeout=0):
+                # Check if the specific indices we want to create already exist (using preloaded data)
+                existing_indices = existing_indices_bulk.get(wav_file, {})
+                indices_exist = len(existing_indices) > 0
+                
+                if indices_exist and not force:
+                    exists += 1
+                    file_duration = time.time() - file_start_time
+                    existing_names = list(existing_indices.keys())
+                    print(f"(exists: {existing_names}) ({file_duration:.1f}s)")
+                    continue
+                elif indices_exist and force:
+                    if not dry_run:
+                        # Delete existing specific indices before reprocessing (only if not dry-run)
+                        for index_name in expected_indices:
+                            if index_name in existing_indices:
+                                # Note: delete_indices_for_file deletes ALL indices for file+type, not specific ones
+                                # This is a limitation of the current DatabaseManager API
+                                pass
+                
+                if dry_run:
+                    # Dry-run mode: just show what would be processed
+                    created += 1
+                    file_duration = time.time() - file_start_time
+                    enabled_indices = processor.get_enabled_indices()
+                    print(f"[DRY-RUN] would process {len(enabled_indices)} indices ({file_duration:.1f}s)")
+                else:
+                    # Normal processing mode
+                    # Process file
+                    indices_data = processor.process_file(wav_file)
+                    timestamps = processor.get_chunk_timestamps()
+                    
+                    # Store in database
+                    db_manager.store_indices(wav_file, "temporal", indices_data, timestamps)
+                    
+                    created += 1
+                    file_duration = time.time() - file_start_time
+                    print(f"✓ ({file_duration:.1f}s)")
+        except Timeout:
+            # File is locked by another process, skip it
             file_duration = time.time() - file_start_time
-            existing_names = list(existing_indices.keys())
-            print(f"(exists: {existing_names}) ({file_duration:.1f}s)")
+            print(f"(locked) ({file_duration:.3f}s)")
             continue
-        elif indices_exist and force:
-            if not dry_run:
-                # Delete existing specific indices before reprocessing (only if not dry-run)
-                for index_name in expected_indices:
-                    if index_name in existing_indices:
-                        # Note: delete_indices_for_file deletes ALL indices for file+type, not specific ones
-                        # This is a limitation of the current DatabaseManager API
-                        pass
-        
-        if dry_run:
-            # Dry-run mode: just show what would be processed
-            created += 1
-            file_duration = time.time() - file_start_time
-            enabled_indices = processor.get_enabled_indices()
-            print(f"[DRY-RUN] would process {len(enabled_indices)} indices ({file_duration:.1f}s)")
-        else:
-            # Normal processing mode
-            # Process file
-            indices_data = processor.process_file(wav_file)
-            timestamps = processor.get_chunk_timestamps()
-            
-            # Store in database
-            db_manager.store_indices(wav_file, "temporal", indices_data, timestamps)
-            
-            created += 1
-            file_duration = time.time() - file_start_time
-            print(f"✓ ({file_duration:.1f}s)")
         
         # Progress reporting and cleanup
         if i % 5 == 0:
@@ -216,8 +236,17 @@ def process_temporal_files(files: List[str], config: dict, target_name: str, for
 
 def process_spectral_files(files: List[str], config: dict, device: torch.device, target_name: str, force: bool = False, dry_run: bool = False) -> tuple:
     """Process spectral indices from NPZ files"""
+    # Get database path from config
+    db_path = config.get('database_path')
+    if not db_path:
+        raise ValueError("❌ No database_path specified in config file")
+    
+    db_file = Path(db_path)
+    if not db_file.exists():
+        raise FileNotFoundError(f"❌ Database file not found: {db_path}")
+    
     processor = SpectralIndicesProcessor(config, device)
-    db_manager = DatabaseManager()
+    db_manager = DatabaseManager(db_path)
     
     # Get the specific indices that would be created by this processor
     if hasattr(processor, 'named_indices') and processor.named_indices:
@@ -256,43 +285,52 @@ def process_spectral_files(files: List[str], config: dict, device: torch.device,
         file_start_time = time.time()
         print(f"[{target_name}] [{i:4d}/{len(files)}] {os.path.basename(npz_file)}...", end=" ")
         
-        # Check if the specific indices we want to create already exist (using preloaded data)
-        existing_indices = existing_indices_bulk.get(npz_file, {})
-        indices_exist = len(existing_indices) > 0
-        
-        if indices_exist and not force:
-            exists += 1
+        # Try to acquire file lock - skip immediately if locked
+        lock_path = f"{npz_file}.lock"
+        try:
+            with FileLock(lock_path, timeout=0):
+                # Check if the specific indices we want to create already exist (using preloaded data)
+                existing_indices = existing_indices_bulk.get(npz_file, {})
+                indices_exist = len(existing_indices) > 0
+                
+                if indices_exist and not force:
+                    exists += 1
+                    file_duration = time.time() - file_start_time
+                    existing_names = list(existing_indices.keys())
+                    print(f"(exists: {existing_names}) ({file_duration:.1f}s)")
+                    continue
+                elif indices_exist and force:
+                    if not dry_run:
+                        # Delete existing specific indices before reprocessing (only if not dry-run)
+                        for index_name in expected_indices:
+                            if index_name in existing_indices:
+                                # Note: delete_indices_for_file deletes ALL indices for file+type, not specific ones
+                                # This is a limitation of the current DatabaseManager API
+                                pass
+                
+                if dry_run:
+                    # Dry-run mode: just show what would be processed
+                    created += 1
+                    file_duration = time.time() - file_start_time
+                    enabled_indices = processor.get_enabled_indices()
+                    print(f"[DRY-RUN] would process {len(enabled_indices)} indices ({file_duration:.1f}s)")
+                else:
+                    # Normal processing mode
+                    # Process file
+                    indices_data = processor.process_file(npz_file)
+                    timestamps = processor.get_chunk_timestamps()
+                    
+                    # Store in database
+                    db_manager.store_indices(npz_file, "spectral", indices_data, timestamps)
+                    
+                    created += 1
+                    file_duration = time.time() - file_start_time
+                    print(f"✓ ({file_duration:.1f}s)")
+        except Timeout:
+            # File is locked by another process, skip it
             file_duration = time.time() - file_start_time
-            existing_names = list(existing_indices.keys())
-            print(f"(exists: {existing_names}) ({file_duration:.1f}s)")
+            print(f"(locked) ({file_duration:.3f}s)")
             continue
-        elif indices_exist and force:
-            if not dry_run:
-                # Delete existing specific indices before reprocessing (only if not dry-run)
-                for index_name in expected_indices:
-                    if index_name in existing_indices:
-                        # Note: delete_indices_for_file deletes ALL indices for file+type, not specific ones
-                        # This is a limitation of the current DatabaseManager API
-                        pass
-        
-        if dry_run:
-            # Dry-run mode: just show what would be processed
-            created += 1
-            file_duration = time.time() - file_start_time
-            enabled_indices = processor.get_enabled_indices()
-            print(f"[DRY-RUN] would process {len(enabled_indices)} indices ({file_duration:.1f}s)")
-        else:
-            # Normal processing mode
-            # Process file
-            indices_data = processor.process_file(npz_file)
-            timestamps = processor.get_chunk_timestamps()
-            
-            # Store in database
-            db_manager.store_indices(npz_file, "spectral", indices_data, timestamps)
-            
-            created += 1
-            file_duration = time.time() - file_start_time
-            print(f"✓ ({file_duration:.1f}s)")
         
         # Progress reporting and cleanup
         if i % 5 == 0:
@@ -333,12 +371,15 @@ def main():
             return
         input_source = "config file"
     
+    # Set target indices - default to all targets if not specified
+    target_indices = args.target if args.target else list(range(10))
+    
     dry_run_text = " (DRY-RUN MODE)" if args.dry_run else ""
     print(f"🎵 Acoustic Indices Processing Starting...{dry_run_text}")
     print(f"Input directory: {input_directory} (from {input_source})")
     print(f"Configuration: {args.config}")
     print(f"Processing type: {processing_type.upper()}")
-    print(f"Target groups: {args.target}")
+    print(f"Target groups: {target_indices}")
     if args.dry_run:
         print(f"🔍 Dry-run mode: No actual processing or database writes will occur")
     device = setup_device()
@@ -352,9 +393,9 @@ def main():
         return
     
     # Apply target filtering
-    target_files = filter_files_by_target(all_files, args.target)
+    target_files = filter_files_by_target(all_files, target_indices)
     
-    target_str = "_".join(map(str, args.target))
+    target_str = "_".join(map(str, target_indices))
     target_name = f"{processing_type.upper()}_GROUP_{target_str}"
     
     print(f"\n🎯 Processing {target_name}: {len(target_files)}/{len(all_files)} files")

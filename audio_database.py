@@ -272,34 +272,3 @@ class AudioDatabase:
         
         return True
 
-def main():
-    """Main function to set up and populate the database."""
-    audio_dir = "/mnt/n/AudioWalks/H3-VC/2025-6-20_to_7-31"
-    db = AudioDatabase("audiomoth.db")
-    
-    print("AudioMoth Database Setup")
-    print("=" * 40)
-    
-    # Check current state
-    current_count = db.get_file_count()
-    print(f"Current files in database: {current_count}")
-    
-    if current_count == 0:
-        print("Scanning directory for audio files...")
-        processed, errors = db.scan_directory(audio_dir)
-        
-        print(f"\nDatabase populated with {processed} files")
-        
-        # Show summary
-        date_range = db.get_date_range()
-        if date_range[0]:
-            print(f"Date range: {date_range[0]} to {date_range[1]}")
-    
-    else:
-        print("Database already contains files. Use rescan option if needed.")
-        date_range = db.get_date_range()
-        if date_range[0]:
-            print(f"Date range: {date_range[0]} to {date_range[1]}")
-
-if __name__ == "__main__":
-    main()
