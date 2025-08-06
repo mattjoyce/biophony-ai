@@ -1,0 +1,32 @@
+input_directory : "/mnt/n/AudioWalks/H3-VC/2025-6-20_to_7-31/"
+database_path : "audiomoth.db"
+
+# Audio parameters
+sample_rate: 48000
+file_duration_sec: 900
+
+# Display parameters
+width-px : 1000
+height-px : 300
+border-px : 0
+dpi : 100
+
+# Spectrogram parameters
+n_fft : 2048
+hop_length : 256
+n_mels : 128
+
+# Global contrast normalization range
+global_min : -40
+global_max : 40
+
+# Acoustic indices configuration - EASTERN FROGLET SPECIFIC
+acoustic_indices:
+  spectral:
+    chunk_duration_sec: 4.5
+    # Eastern froglet specific bioacoustic index (2500-3500 Hz call frequency)
+    eastern_froglet_bai_2500-3500:
+      processor: bioacoustics_index
+      params:
+        freq_min: 2500
+        freq_max: 3500

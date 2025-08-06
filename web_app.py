@@ -416,6 +416,62 @@ def serve_audio(filename):
         conditional=True  # Enable range requests for seeking
     )
 
+@app.route('/api/navigation')
+def api_navigation():
+    """Get next/previous file info based on current date and time."""
+    import sqlite3
+    from datetime import datetime, timedelta
+    
+    current_date = request.args.get('date')
+    current_time = request.args.get('time')
+    direction = request.args.get('direction', 'next')  # 'next' or 'prev'
+    
+    if not current_date or not current_time:
+        return jsonify({'error': 'Date and time required'}), 400
+    
+    conn = sqlite3.connect(db.db_path)
+    cursor = conn.cursor()
+    
+    # Current datetime string (using ISO format to match database)
+    current_datetime = f"{current_date}T{current_time}:00"
+    
+    if direction == 'next':
+        # Find next file chronologically
+        cursor.execute("""
+            SELECT DATE(recording_datetime) as date, TIME(recording_datetime) as time,
+                   filename, filepath
+            FROM audio_files 
+            WHERE recording_datetime > ?
+            ORDER BY recording_datetime ASC
+            LIMIT 1
+        """, (current_datetime,))
+    else:
+        # Find previous file chronologically
+        cursor.execute("""
+            SELECT DATE(recording_datetime) as date, TIME(recording_datetime) as time,
+                   filename, filepath
+            FROM audio_files 
+            WHERE recording_datetime < ?
+            ORDER BY recording_datetime DESC
+            LIMIT 1
+        """, (current_datetime,))
+    
+    result = cursor.fetchone()
+    conn.close()
+    
+    if not result:
+        return jsonify({'error': f'No {direction} file found'}), 404
+    
+    date, time, filename, filepath = result
+    time_short = time[:5]  # Remove seconds
+    
+    return jsonify({
+        'date': date,
+        'time': time_short,
+        'filename': filename,
+        'filepath': filepath
+    })
+
 @app.route('/api/upload_labels', methods=['POST'])
 def upload_labels():
     """Upload Audacity label file."""

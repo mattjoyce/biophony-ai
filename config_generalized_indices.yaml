@@ -1,0 +1,99 @@
+input_directory : "/mnt/n/AudioWalks/H3-VC/2025-6-20_to_7-31/"
+database_path : "audiomoth.db"
+
+# Audio parameters
+sample_rate: 48000
+file_duration_sec: 900
+
+# Display parameters
+width-px : 1000
+height-px : 300
+border-px : 0
+dpi : 100
+
+# Spectrogram parameters
+n_fft : 2048
+hop_length : 256
+n_mels : 128
+
+# Global contrast normalization range
+global_min : -40
+global_max : 40
+
+# Acoustic indices configuration - GENERALIZED NAMED INDICES
+acoustic_indices:
+  temporal:
+    chunk_duration_sec: 4.5
+    # Named temporal indices with processor + params
+    basic_temporal_entropy:
+      processor: temporal_entropy
+      params: {}
+      
+    # Multiple instances of temporal_activity with different return values
+    temporal_activity_level:
+      processor: temporal_activity
+      params:
+        return_value: activity
+        
+    temporal_event_count:
+      processor: temporal_activity
+      params:
+        return_value: count
+        
+    temporal_mean_db:
+      processor: temporal_activity
+      params:
+        return_value: mean_db
+        
+    basic_temporal_median:
+      processor: temporal_median
+      params: {}
+      
+  spectral:
+    chunk_duration_sec: 4.5
+    # Named spectral indices with processor + params
+    
+    # Standard complexity analysis
+    standard_aci:
+      processor: acoustic_complexity_index
+      params: {}
+    
+    # Frequency-specific bioacoustic indices
+        
+    eastern_froglett_bai:
+      processor: bioacoustics_index
+      params:
+        freq_min: 2500
+        freq_max: 3500
+        
+    bird_chorus_bai:
+      processor: bioacoustics_index
+      params:
+        freq_min: 4000
+        freq_max: 8000
+    
+    # Soundscape analysis with custom frequency bands
+    urban_soundscape_frogs:
+      processor: soundscape_index
+      params:
+        bioacoustic_freq_min: 500
+        bioacoustic_freq_max: 3500
+        anthropogenic_freq_min: 0
+        anthropogenic_freq_max: 500
+        
+    natural_soundscape_birds:
+      processor: soundscape_index
+      params:
+        bioacoustic_freq_min: 4000
+        bioacoustic_freq_max: 8000
+        anthropogenic_freq_min: 0
+        anthropogenic_freq_max: 1000
+    
+    # Entropy analyses
+    standard_spectral_entropy:
+      processor: spectral_entropy
+      params: {}
+      
+    standard_frequency_entropy:
+      processor: frequency_entropy
+      params: {}

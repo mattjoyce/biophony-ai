@@ -1,0 +1,107 @@
+input_directory : "/mnt/n/AudioWalks/H3-VC/2025-6-20_to_7-31/"
+database_path : "audiomoth.db"
+
+# Audio parameters
+sample_rate: 48000
+file_duration_sec: 900
+
+# Display parameters
+width-px : 1000
+height-px : 300
+border-px : 0
+dpi : 100
+
+# Spectrogram parameters
+n_fft : 2048
+hop_length : 256
+n_mels : 128
+
+# Global contrast normalization range
+global_min : -40
+global_max : 40
+
+# Acoustic indices configuration - MULTI-SPECIES FROG DETECTION
+acoustic_indices:
+  spectral:
+    chunk_duration_sec: 4.5
+    
+    # VALIDATED: Eastern froglet specific bioacoustic index (2500-3500 Hz call frequency)
+    eastern_froglet_bai_2500-3500:
+      processor: bioacoustics_index
+      params:
+        freq_min: 2500
+        freq_max: 3500
+        
+    # NEW: Striped Marsh Frog - low frequency calls (400-1800 Hz)
+    # Limnodynastes peronii - distinctive low-frequency "tok" calls
+    striped_marsh_frog_bai_400-1800:
+      processor: bioacoustics_index
+      params:
+        freq_min: 400
+        freq_max: 1800
+        
+    # NEW: Spotted Marsh Frog - mid-low frequency calls (600-2000 Hz) 
+    # Limnodynastes tasmaniensis - "pop" calls, slightly higher than Striped Marsh
+    spotted_marsh_frog_bai_600-2000:
+      processor: bioacoustics_index
+      params:
+        freq_min: 600
+        freq_max: 2000
+        
+    # NEW: Common Froglet variant - broader range (2000-4000 Hz)
+    # Crinia signifera subspecies or related species with wider frequency range
+    common_froglet_bai_2000-4000:
+      processor: bioacoustics_index
+      params:
+        freq_min: 2000
+        freq_max: 4000
+        
+    # NEW: Low-frequency frog soundscape index for species separation
+    # Separates frog calls from traffic/anthropogenic low-frequency noise
+    low_freq_frogs_vs_traffic:
+      processor: soundscape_index
+      params:
+        bioacoustic_freq_min: 400
+        bioacoustic_freq_max: 2500
+        anthropogenic_freq_min: 50
+        anthropogenic_freq_max: 400
+        
+    # NEW: Mid-frequency frog soundscape for Eastern Froglet context
+    # Provides ecological context for Eastern Froglet within broader frog community
+    mid_freq_frog_community:
+      processor: soundscape_index
+      params:
+        bioacoustic_freq_min: 2000
+        bioacoustic_freq_max: 4000
+        anthropogenic_freq_min: 400
+        anthropogenic_freq_max: 2000
+        
+    # NEW: Green and Golden Bell Frog - primary detection (1200-2500 Hz)
+    # Litoria aurea - distinctive "craw-awk" growling calls, nocturnal (20:00-02:00)
+    green_golden_bell_frog_bai:
+      processor: bioacoustics_index
+      params:
+        freq_min: 1200
+        freq_max: 2500
+        
+    # NEW: Bell Frog soundscape separation from low-frequency noise
+    # Separates L. aurea calls (1200-2500 Hz) from traffic/anthropogenic (0-800 Hz)
+    litoria_aurea_soundscape:
+      processor: soundscape_index
+      params:
+        bioacoustic_freq_min: 1200
+        bioacoustic_freq_max: 2500
+        anthropogenic_freq_min: 0
+        anthropogenic_freq_max: 800
+        
+    # NEW: Acoustic Evenness Index - detects spectral concentration
+    # L. aurea calls create AEI minima due to concentrated energy in 1200-2500 Hz
+    acoustic_eveness_index:
+      processor: acoustic_eveness_index
+      params: {}
+      
+    # NEW: Acoustic Diversity Index - distinguishes from broadband sounds  
+    # L. aurea calls create ADI minima due to reduced spectral diversity
+    acoustic_diversity_index:
+      processor: acoustic_diversity_index
+      params: {}
