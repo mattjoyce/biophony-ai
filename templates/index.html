@@ -1,0 +1,1290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AudioMoth Spectrogram Viewer</title>
+    <!-- Howler.js for robust audio playback -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/howler/2.2.3/howler.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .controls {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        label {
+            font-weight: bold;
+            font-size: 12px;
+            color: #666;
+        }
+        input, select {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        button {
+            padding: 8px 16px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .viewer-container {
+            display: flex;
+            gap: 10px;
+            align-items: flex-start;
+        }
+        .info-panels {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .coordinates-panel {
+            background: #f8f9fa;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 10px;
+            font-family: monospace;
+            font-size: 12px;
+            min-width: 120px;
+        }
+        .coordinates-panel div {
+            margin: 2px 0;
+        }
+        .weather-panel {
+            background: #e8f4fd;
+            border: 1px solid #bee5eb;
+            border-radius: 4px;
+            padding: 10px;
+            font-family: monospace;
+            font-size: 12px;
+            min-width: 120px;
+        }
+        .weather-panel div {
+            margin: 2px 0;
+        }
+        .canvas-container {
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            overflow: hidden;
+            background: #000;
+            width: fit-content;
+            height: fit-content;
+            position: relative;
+        }
+        .spectrogram-container {
+            position: relative;
+            display: inline-block;
+        }
+        .playback-cursor {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 2px;
+            height: 100%;
+            background: linear-gradient(to bottom, 
+                rgba(255, 255, 255, 0.9), 
+                rgba(255, 255, 255, 0.7));
+            box-shadow: 
+                0 0 2px rgba(0, 0, 0, 0.8),
+                0 0 6px rgba(255, 255, 255, 0.5);
+            pointer-events: none;
+            display: none;
+            z-index: 10;
+            transition: left 0.1s ease-out;
+        }
+        .control-group.playback-controls {
+            display: none;
+        }
+        .control-group.playback-controls.has-audio {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        .playback-controls .time-display {
+            color: #333;
+            font-size: 14px;
+            font-weight: normal;
+            white-space: nowrap;
+        }
+        .crosshair {
+            position: absolute;
+            pointer-events: none;
+            z-index: 10;
+        }
+        .crosshair-vertical {
+            width: 1px;
+            height: 300px;
+            background: rgba(255, 255, 255, 0.7);
+            top: 0;
+        }
+        .crosshair-horizontal {
+            width: 1000px;
+            height: 1px;
+            background: rgba(255, 255, 255, 0.7);
+            left: 0;
+        }
+        #spectrogramCanvas {
+            display: block;
+            width: 1000px;
+            height: 300px;
+            max-width: 100%;
+            border: 1px solid #ccc;
+        }
+        .error {
+            color: #dc3545;
+            padding: 10px;
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            border-radius: 4px;
+            margin-top: 10px;
+        }
+        .info {
+            margin-top: 10px;
+            padding: 10px;
+            background-color: #d1ecf1;
+            border: 1px solid #bee5eb;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .time-grid-container {
+            margin: 20px 0;
+        }
+        .time-grid {
+            display: grid;
+            grid-template-columns: repeat(24, 20px);
+            grid-template-rows: repeat(2, 20px);
+            gap: 1px;
+            width: fit-content;
+            margin-top: 10px;
+        }
+        .time-cell {
+            width: 20px;
+            height: 20px;
+            background-color: #ddd;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .time-cell:hover {
+            background-color: #007bff;
+        }
+        .time-cell.available {
+            background-color: #28a745;
+        }
+        .time-cell.selected {
+            background-color: #dc3545;
+        }
+        .time-cell.available:hover {
+            background-color: #218838;
+        }
+        .adjustment-value {
+            font-size: 11px;
+            color: #666;
+            font-family: monospace;
+            min-width: 30px;
+            text-align: center;
+            margin-left: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2 style="margin: 0 0 15px 0; font-size: 18px; color: #333;">AudioMoth Spectrogram Viewer</h2>
+        
+        <div class="controls">
+            <div class="control-group">
+                <label for="date">Date:</label>
+                <div style="display: flex; align-items: center; gap: 5px;">
+                    <button onclick="changeDate(-1)" id="prevDate">◀</button>
+                    <input type="date" id="date" value="2025-06-20">
+                    <button onclick="changeDate(1)" id="nextDate">▶</button>
+                </div>
+            </div>
+            
+            <div class="control-group">
+                <label for="colormap">Color Map:</label>
+                <select id="colormap">
+                    <option value="viridis">Viridis</option>
+                    <option value="plasma">Plasma</option>
+                    <option value="inferno">Inferno</option>
+                    <option value="magma">Magma</option>
+                    <option value="cividis">Cividis</option>
+                    <option value="jet">Jet</option>
+                    <option value="hot">Hot</option>
+                    <option value="cool">Cool</option>
+                    <option value="spring">Spring</option>
+                    <option value="summer">Summer</option>
+                    <option value="autumn">Autumn</option>
+                    <option value="winter">Winter</option>
+                    <option value="copper">Copper</option>
+                    <option value="bone">Bone</option>
+                    <option value="pink">Pink</option>
+                    <option value="gray">Grayscale</option>
+                    <option value="seismic">Seismic</option>
+                    <option value="RdYlBu">RdYlBu</option>
+                    <option value="Spectral">Spectral</option>
+                    <option value="coolwarm">Cool Warm</option>
+                </select>
+            </div>
+            
+            <div class="control-group playback-controls">
+                <label>Audio Playback:</label>
+                <div style="display: flex; align-items: center; gap: 5px;">
+                    <button class="play-pause-btn">▶️</button>
+                    <button class="stop-btn">⏹️</button>
+                    <span class="time-display">00:00 / 15:00</span>
+                </div>
+            </div>
+            
+            <div class="control-group">
+                <label for="gamma">Gamma:</label>
+                <input type="range" id="gamma" min="0.1" max="3.0" value="1.0" step="0.1">
+                <span class="adjustment-value">1.0</span>
+            </div>
+        </div>
+        
+        <div class="time-grid-container">
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+                <label>Time Grid (Click to select):</label>
+                <div style="display: flex; gap: 5px; margin-left: auto;">
+                    <button onclick="navigateToFile('prev')" id="prevFile" title="Previous file (chronological)">◀ Prev</button>
+                    <button onclick="navigateToFile('next')" id="nextFile" title="Next file (chronological)">Next ▶</button>
+                </div>
+            </div>
+            <div class="time-grid" id="timeGrid"></div>
+        </div>
+        
+        <div class="viewer-container">
+            <div class="info-panels">
+                <div class="coordinates-panel">
+                    <div><strong>Position:</strong></div>
+                    <div id="pixelCoords">x:---- y:----</div>
+                    <div id="timeCoords">Time: --:--:--</div>
+                    <div id="freqCoords">Freq: ---- Hz</div>
+                </div>
+                <div class="weather-panel">
+                    <div><strong>Weather:</strong></div>
+                    <div id="temperature">Temp: --°C</div>
+                    <div id="humidity">Humidity: --%</div>
+                    <div id="windSpeed">Wind: -- km/h</div>
+                    <div id="precipitation">Rain: -- mm</div>
+                </div>
+            </div>
+            <div class="spectrogram-container" data-filename="" data-duration="900">
+                <div class="canvas-container">
+                    <canvas id="spectrogramCanvas"></canvas>
+                    <div id="crosshairVertical" class="crosshair crosshair-vertical" style="display: none;"></div>
+                    <div id="crosshairHorizontal" class="crosshair crosshair-horizontal" style="display: none;"></div>
+                    <div class="playback-cursor"></div>
+                </div>
+            </div>
+        </div>
+        
+        <div id="errorMessage" class="error" style="display: none;"></div>
+        <div id="infoMessage" class="info" style="display: none;"></div>
+        <div id="filePathMessage" class="info" style="display: none;"></div>
+    </div>
+
+    <script>
+        let colormapCache = {};
+        let melScaleData = null;
+        let currentPlayer = null;
+
+        // Global function to stop all audio
+        function stopAllAudio() {
+            if (currentPlayer) {
+                currentPlayer.stop();
+            }
+            // Also stop any Howler instances that might be playing
+            if (typeof Howler !== 'undefined') {
+                Howler.stop();
+            }
+        }
+
+        // Image adjustment variables
+        let imageAdjustments = {
+            gamma: 1.0
+        };
+
+        // Apply gamma adjustment to canvas (works on current canvas content, not original)
+        function applyImageAdjustments(canvas) {
+            if (!canvas || imageAdjustments.gamma === 1.0) return;
+            
+            const ctx = canvas.getContext('2d');
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const data = imageData.data;
+            
+            const gamma = 1.0 / imageAdjustments.gamma; // Gamma correction
+            
+            // Create gamma lookup table for performance
+            const gammaTable = new Array(256);
+            for (let i = 0; i < 256; i++) {
+                gammaTable[i] = Math.pow(i / 255, gamma) * 255;
+            }
+            
+            for (let i = 0; i < data.length; i += 4) {
+                // Apply gamma to RGB channels (skip alpha)
+                for (let c = 0; c < 3; c++) {
+                    const value = data[i + c];
+                    data[i + c] = Math.max(0, Math.min(255, Math.round(gammaTable[value])));
+                }
+                // Alpha channel (data[i + 3]) remains unchanged
+            }
+            
+            ctx.putImageData(imageData, 0, 0);
+        }
+
+        // Update gamma display value
+        function updateAdjustmentDisplays() {
+            document.querySelector('#gamma + .adjustment-value').textContent = imageAdjustments.gamma.toFixed(1);
+        }
+
+        // Reset gamma to 1.0
+        function resetGamma() {
+            imageAdjustments.gamma = 1.0;
+            document.getElementById('gamma').value = 1.0;
+            updateAdjustmentDisplays();
+            
+            const canvas = document.getElementById('spectrogramCanvas');
+            if (canvas && window.originalImageData) {
+                // Reapply colormap without gamma
+                const colormap = document.getElementById('colormap').value;
+                applyColormap(window.originalImageData, colormap).then(coloredImageData => {
+                    const ctx = canvas.getContext('2d');
+                    ctx.putImageData(coloredImageData, 0, 0);
+                });
+            }
+        }
+
+        // Update weather display
+        function updateWeatherDisplay(weatherData) {
+            document.getElementById('temperature').textContent = 
+                weatherData.temperature !== null ? `Temp: ${weatherData.temperature}°C` : 'Temp: --°C';
+            
+            document.getElementById('humidity').textContent = 
+                weatherData.humidity !== null ? `Humidity: ${weatherData.humidity}%` : 'Humidity: --%';
+            
+            document.getElementById('windSpeed').textContent = 
+                weatherData.wind_speed !== null ? `Wind: ${weatherData.wind_speed} km/h` : 'Wind: -- km/h';
+            
+            document.getElementById('precipitation').textContent = 
+                weatherData.precipitation !== null ? `Rain: ${weatherData.precipitation} mm` : 'Rain: -- mm';
+        }
+
+        // Clear weather display
+        function clearWeatherDisplay() {
+            document.getElementById('temperature').textContent = 'Temp: --°C';
+            document.getElementById('humidity').textContent = 'Humidity: --%';
+            document.getElementById('windSpeed').textContent = 'Wind: -- km/h';
+            document.getElementById('precipitation').textContent = 'Rain: -- mm';
+        }
+
+        class SpectrogramAudioPlayer {
+            constructor(containerElement) {
+                this.container = containerElement;
+                this.spectrogramImg = containerElement.querySelector('#spectrogramCanvas');
+                this.cursor = containerElement.querySelector('.playback-cursor');
+                this.controlsPanel = document.querySelector('.control-group.playback-controls');
+                this.filename = containerElement.dataset.filename;
+                this.duration = parseInt(containerElement.dataset.duration);
+                this.audio = null;
+                this.animationId = null;
+                
+                this.setupEventListeners();
+                
+                // Preload audio for faster playback
+                setTimeout(() => this.preloadAudio(), 100);
+            }
+            
+            setupEventListeners() {
+                // Click-to-play functionality
+                this.spectrogramImg.addEventListener('click', (e) => {
+                    const timeOffset = this.calculateTimeFromClick(e);
+                    this.playAtTime(timeOffset);
+                });
+                
+                // Control buttons - now in external controls panel
+                const playPauseBtn = this.controlsPanel.querySelector('.play-pause-btn');
+                const stopBtn = this.controlsPanel.querySelector('.stop-btn');
+                
+                if (playPauseBtn) {
+                    playPauseBtn.addEventListener('click', () => {
+                        this.togglePlayPause();
+                    });
+                }
+                
+                if (stopBtn) {
+                    stopBtn.addEventListener('click', () => {
+                        this.stop();
+                    });
+                }
+            }
+            
+            calculateTimeFromClick(clickEvent) {
+                const rect = this.spectrogramImg.getBoundingClientRect();
+                const clickX = clickEvent.clientX - rect.left;
+                const imageWidth = this.spectrogramImg.offsetWidth;
+                
+                // Calculate time offset (0.9 seconds per pixel for 1000px/900s)
+                const timeOffset = (clickX / imageWidth) * this.duration;
+                return Math.max(0, Math.min(timeOffset, this.duration));
+            }
+            
+            preloadAudio() {
+                if (!this.filename || this.audio) return;
+                
+                // Preload audio file for faster playback
+                this.audio = new Howl({
+                    src: [`/api/audio/${this.filename}`],
+                    format: ['wav'],
+                    preload: true,
+                    onload: () => {
+                        console.log('Audio preloaded successfully');
+                    },
+                    onplay: () => {
+                        console.log('Audio onplay event - starting cursor animation');
+                        this.updatePlayPauseButton(true);
+                        this.startCursorAnimation();
+                    },
+                    onpause: () => {
+                        this.updatePlayPauseButton(false);
+                    },
+                    onstop: () => {
+                        this.stopCursorAnimation();
+                        this.updatePlayPauseButton(false);
+                    },
+                    onend: () => {
+                        this.stopCursorAnimation();
+                        this.updatePlayPauseButton(false);
+                    },
+                    onerror: (error) => {
+                        console.error('Audio playback error:', error);
+                        this.showError('Failed to load audio file');
+                    }
+                });
+            }
+
+            async playAtTime(timeOffset) {
+                if (!this.filename) {
+                    console.error('No filename available for audio playback');
+                    this.showError('Audio file not available');
+                    return;
+                }
+                
+                try {
+                    // Stop ALL audio globally first
+                    stopAllAudio();
+                    
+                    // Set this as the current player
+                    currentPlayer = this;
+                    
+                    // Ensure audio is loaded
+                    if (!this.audio) {
+                        this.preloadAudio();
+                    }
+                    
+                    // Show cursor immediately at click position
+                    this.updateCursorPosition(timeOffset);
+                    this.cursor.style.display = 'block';
+                    
+                    // Wait for audio to be loaded if needed
+                    if (this.audio && this.audio.state() !== 'loaded') {
+                        console.log('Audio not loaded yet, waiting for load event');
+                        this.audio.once('load', () => {
+                            if (this.audio) {  // Check if still exists
+                                console.log('Audio loaded, starting playback');
+                                this.audio.seek(timeOffset);
+                                this.audio.play();
+                                // Don't start animation here - let onplay handle it
+                            }
+                        });
+                    } else if (this.audio) {
+                        console.log('Audio already loaded, starting playback immediately');
+                        this.audio.seek(timeOffset);
+                        this.audio.play();
+                        // Don't start animation here - let onplay handle it
+                    }
+                    
+                } catch (error) {
+                    console.error('Playback initialization error:', error);
+                    this.showError('Audio playback not supported');
+                }
+            }
+            
+            startCursorAnimation() {
+                console.log('startCursorAnimation called');
+                
+                // Stop any existing animation
+                this.stopCursorAnimation();
+                
+                // Cursor should already be visible from playAtTime
+                this.cursor.style.display = 'block';
+                
+                const animate = () => {
+                    if (this.audio && this.audio.playing()) {
+                        const currentTime = this.audio.seek();
+                        console.log(`Animation frame: audio playing, currentTime=${currentTime}`);
+                        this.updateCursorPosition(currentTime);
+                        this.updateTimeDisplay(currentTime);
+                        this.animationId = requestAnimationFrame(animate);
+                    } else {
+                        console.log(`Animation stopped: audio=${!!this.audio}, playing=${this.audio ? this.audio.playing() : 'N/A'}`);
+                        // Clear animation ID since we're stopping
+                        this.animationId = null;
+                    }
+                };
+                
+                // Start the animation loop
+                console.log('Starting animation loop');
+                this.animationId = requestAnimationFrame(animate);
+            }
+            
+            updateCursorPosition(currentTime) {
+                const progress = currentTime / this.duration;
+                const containerWidth = this.spectrogramImg.offsetWidth;
+                const position = Math.round(progress * containerWidth);
+                
+                // Debug logging
+                console.log(`Cursor update: time=${currentTime.toFixed(2)}s, progress=${(progress*100).toFixed(1)}%, width=${containerWidth}px, position=${position}px`);
+                
+                this.cursor.style.left = `${position}px`;
+            }
+            
+            stopCursorAnimation() {
+                console.log('stopCursorAnimation called, animationId:', this.animationId);
+                if (this.animationId) {
+                    cancelAnimationFrame(this.animationId);
+                    this.animationId = null;
+                }
+                // Keep cursor visible but stop animating
+            }
+            
+            togglePlayPause() {
+                if (!this.audio) return;
+                
+                if (this.audio.playing()) {
+                    this.audio.pause();
+                } else {
+                    this.audio.play();
+                    this.startCursorAnimation();
+                }
+            }
+            
+            stop() {
+                if (this.audio) {
+                    this.audio.stop();
+                    this.stopCursorAnimation();
+                }
+            }
+            
+            updatePlayPauseButton(isPlaying) {
+                const btn = this.controlsPanel.querySelector('.play-pause-btn');
+                if (btn) {
+                    btn.textContent = isPlaying ? '⏸️' : '▶️';
+                }
+            }
+            
+            updateTimeDisplay(currentTime) {
+                const display = this.controlsPanel.querySelector('.time-display');
+                if (display) {
+                    const current = this.formatTime(currentTime);
+                    const total = this.formatTime(this.duration);
+                    display.textContent = `${current} / ${total}`;
+                }
+            }
+            
+            formatTime(seconds) {
+                const mins = Math.floor(seconds / 60);
+                const secs = Math.floor(seconds % 60);
+                return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+            }
+            
+            showError(message) {
+                console.error(message);
+                const errorMessage = document.getElementById('errorMessage');
+                if (errorMessage) {
+                    errorMessage.textContent = message;
+                    errorMessage.style.display = 'block';
+                }
+            }
+            
+            updateFilename(filename) {
+                this.filename = filename;
+                this.container.dataset.filename = filename;
+            }
+            
+            hideCursor() {
+                this.cursor.style.display = 'none';
+            }
+            
+            dispose() {
+                if (this.audio) {
+                    this.audio.stop();
+                    this.audio.unload();
+                }
+                this.stopCursorAnimation();
+                this.hideCursor();
+                if (currentPlayer === this) {
+                    currentPlayer = null;
+                }
+            }
+        }
+
+        async function loadMelScale() {
+            if (melScaleData) {
+                return melScaleData;
+            }
+            
+            try {
+                const response = await fetch('/api/mel_scale?sample_rate=48000&n_mels=128&fmin=0&fmax=24000');
+                if (response.ok) {
+                    melScaleData = await response.json();
+                    return melScaleData;
+                }
+            } catch (error) {
+                console.error('Error loading mel scale data:', error);
+            }
+            
+            return null;
+        }
+
+        function getFrequencyFromPixel(pixelY, canvasHeight) {
+            if (!melScaleData || !melScaleData.scale_data) {
+                // Fallback to linear scale
+                const maxFreq = 24000;
+                return Math.round((pixelY / canvasHeight) * maxFreq);
+            }
+            
+            // Find the closest mel scale point
+            const scaleIndex = Math.round((pixelY / canvasHeight) * (melScaleData.scale_data.length - 1));
+            const clampedIndex = Math.max(0, Math.min(scaleIndex, melScaleData.scale_data.length - 1));
+            
+            return Math.round(melScaleData.scale_data[clampedIndex].frequency_hz);
+        }
+
+        async function loadColormap(colormapName) {
+            if (colormapCache[colormapName]) {
+                return colormapCache[colormapName];
+            }
+            
+            if (colormapName === 'gray') {
+                colormapCache[colormapName] = null;
+                return null;
+            }
+            
+            try {
+                const response = await fetch(`/api/colormap/${colormapName}`);
+                if (response.ok) {
+                    const colormap = await response.json();
+                    colormapCache[colormapName] = colormap;
+                    return colormap;
+                }
+            } catch (error) {
+                console.error(`Error loading colormap ${colormapName}:`, error);
+            }
+            
+            return null;
+        }
+
+        async function applyColormap(imageData, colormapName) {
+            // Create a copy of the ImageData to avoid modifying the original
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = imageData.width;
+            canvas.height = imageData.height;
+            
+            const newImageData = ctx.createImageData(imageData.width, imageData.height);
+            const data = newImageData.data;
+            const originalData = imageData.data;
+            
+            try {
+                const colormap = await loadColormap(colormapName);
+                
+                for (let i = 0; i < originalData.length; i += 4) {
+                    const gray = originalData[i];
+                    
+                    if (!colormap || colormapName === 'gray') {
+                        data[i] = gray;
+                        data[i + 1] = gray;
+                        data[i + 2] = gray;
+                        data[i + 3] = originalData[i + 3]; // preserve alpha
+                    } else {
+                        const color = colormap[gray] || [gray, gray, gray];
+                        data[i] = color[0];
+                        data[i + 1] = color[1];
+                        data[i + 2] = color[2];
+                        data[i + 3] = originalData[i + 3]; // preserve alpha
+                    }
+                }
+            } catch (error) {
+                console.error('Error applying colormap:', error);
+                // Fallback to grayscale
+                for (let i = 0; i < originalData.length; i += 4) {
+                    const gray = originalData[i];
+                    data[i] = gray;
+                    data[i + 1] = gray;
+                    data[i + 2] = gray;
+                    data[i + 3] = originalData[i + 3]; // preserve alpha
+                }
+            }
+            
+            return newImageData;
+        }
+
+        async function loadSpectrogram() {
+            const canvas = document.getElementById('spectrogramCanvas');
+            const ctx = canvas.getContext('2d');
+            const loadingMessage = document.getElementById('loadingMessage');
+            const errorMessage = document.getElementById('errorMessage');
+            const infoMessage = document.getElementById('infoMessage');
+            
+            const date = document.getElementById('date').value;
+            const timeSlot = document.getElementById('timeSlot').value;
+            const colormap = document.getElementById('colormap').value;
+            
+            loadingMessage.style.display = 'block';
+            errorMessage.style.display = 'none';
+            infoMessage.style.display = 'none';
+            
+            try {
+                const response = await fetch(`/api/spectrogram?date=${date}&time=${timeSlot}`);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const blob = await response.blob();
+                const img = new Image();
+                
+                img.onload = async function() {
+                    try {
+                        canvas.width = img.width;
+                        canvas.height = img.height;
+                        
+                        ctx.drawImage(img, 0, 0);
+                        
+                        // Store original grayscale image data
+                        window.originalImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                        
+                        // Apply saved colormap preference
+                        document.getElementById('colormap').value = colormap;
+                        const coloredImageData = await applyColormap(window.originalImageData, colormap);
+                        
+                        console.log('Applying colormap result:', coloredImageData);
+                        
+                        if (coloredImageData && coloredImageData.data) {
+                            ctx.putImageData(coloredImageData, 0, 0);
+                            
+                            // Apply image adjustments after colormap
+                            applyImageAdjustments(canvas);
+                        } else {
+                            console.error('Invalid ImageData returned from applyColormap');
+                            // Fallback: just draw original grayscale
+                            ctx.putImageData(window.originalImageData, 0, 0);
+                        }
+                        
+                        const deeplinkUrl = `${window.location.origin}${window.location.pathname}?date=${date}&time=${timeSlot}&colormap=${colormap}`;
+                        infoMessage.innerHTML = `Loaded: ${date} ${timeSlot} | ${canvas.width}x${canvas.height} pixels | Colormap: ${colormap} | <a href="${deeplinkUrl}" target="_blank">Deeplink</a>`;
+                        infoMessage.style.display = 'block';
+                        
+                        // Show file path
+                        const filePathMessage = document.getElementById('filePathMessage');
+                        filePathMessage.innerHTML = `File: ${window.currentFilePath || 'Loading...'}`;
+                        filePathMessage.style.display = 'block';
+                        
+                        URL.revokeObjectURL(img.src);
+                    } catch (error) {
+                        console.error('Error in img.onload:', error);
+                        // Fallback: just show the original image
+                        ctx.putImageData(window.originalImageData || ctx.getImageData(0, 0, canvas.width, canvas.height), 0, 0);
+                    }
+                };
+                
+                img.onerror = function() {
+                    errorMessage.textContent = 'Failed to load spectrogram image';
+                    errorMessage.style.display = 'block';
+                    URL.revokeObjectURL(img.src);
+                };
+                
+                img.src = URL.createObjectURL(blob);
+                
+            } catch (error) {
+                errorMessage.textContent = `Error loading spectrogram: ${error.message}`;
+                errorMessage.style.display = 'block';
+                console.error('Spectrogram loading error:', error);
+            }
+        }
+
+        document.getElementById('colormap').addEventListener('change', async function() {
+            lastColormap = this.value;
+            localStorage.setItem('selectedColormap', lastColormap);
+            
+            const canvas = document.getElementById('spectrogramCanvas');
+            if (canvas.width > 0 && window.originalImageData) {
+                const ctx = canvas.getContext('2d');
+                const coloredImageData = await applyColormap(window.originalImageData, this.value);
+                ctx.putImageData(coloredImageData, 0, 0);
+                
+                // Apply image adjustments after colormap
+                applyImageAdjustments(canvas);
+                
+                const infoMessage = document.getElementById('infoMessage');
+                const date = document.getElementById('date').value;
+                const selectedCell = document.querySelector('.time-cell.selected');
+                const timeSlot = selectedCell ? selectedCell.getAttribute('data-time') : '';
+                infoMessage.innerHTML = `Loaded: ${date} ${timeSlot} | ${canvas.width}x${canvas.height} pixels | Colormap: ${this.value}`;
+                infoMessage.style.display = 'block';
+            }
+        });
+
+        let currentSelectedCell = null;
+        let availableTimes = {};
+        let lastSelectedTime = null;
+        let lastColormap = 'viridis';
+        let audioPlayer = null;
+
+        function changeDate(direction) {
+            // Stop any currently playing audio when changing dates
+            stopAllAudio();
+            
+            const dateInput = document.getElementById('date');
+            const currentDate = new Date(dateInput.value);
+            currentDate.setDate(currentDate.getDate() + direction);
+            dateInput.value = currentDate.toISOString().split('T')[0];
+            
+            // Remember current selection
+            if (currentSelectedCell) {
+                lastSelectedTime = currentSelectedCell.getAttribute('data-time');
+            }
+            
+            loadAvailableTimes();
+        }
+
+        async function navigateToFile(direction) {
+            // Stop any currently playing audio
+            stopAllAudio();
+            
+            const currentDate = document.getElementById('date').value;
+            const selectedCell = document.querySelector('.time-cell.selected');
+            
+            if (!selectedCell) {
+                console.log('No time slot selected, cannot navigate');
+                return;
+            }
+            
+            const currentTime = selectedCell.getAttribute('data-time');
+            
+            try {
+                const response = await fetch(`/api/navigation?date=${currentDate}&time=${currentTime}&direction=${direction}`);
+                
+                if (!response.ok) {
+                    if (response.status === 404) {
+                        const errorMessage = document.getElementById('errorMessage');
+                        errorMessage.textContent = `No ${direction} file available`;
+                        errorMessage.style.display = 'block';
+                        setTimeout(() => {
+                            errorMessage.style.display = 'none';
+                        }, 2000);
+                    }
+                    return;
+                }
+                
+                const navData = await response.json();
+                
+                // Update date if needed
+                if (navData.date !== currentDate) {
+                    document.getElementById('date').value = navData.date;
+                    await loadAvailableTimes();
+                }
+                
+                // Select the new time slot
+                const newTimeCell = document.querySelector(`[data-time="${navData.time}"]`);
+                if (newTimeCell && newTimeCell.classList.contains('available')) {
+                    // Clear current selection
+                    if (currentSelectedCell) {
+                        currentSelectedCell.classList.remove('selected');
+                    }
+                    
+                    // Select new cell
+                    newTimeCell.classList.add('selected');
+                    currentSelectedCell = newTimeCell;
+                    lastSelectedTime = navData.time;
+                    
+                    // Load the new spectrogram
+                    await loadSpectrogram();
+                } else {
+                    console.error('New time slot not found or not available:', navData.time);
+                }
+                
+            } catch (error) {
+                console.error('Error navigating to file:', error);
+                const errorMessage = document.getElementById('errorMessage');
+                errorMessage.textContent = `Error navigating to ${direction} file`;
+                errorMessage.style.display = 'block';
+                setTimeout(() => {
+                    errorMessage.style.display = 'none';
+                }, 2000);
+            }
+        }
+
+        function createTimeGrid() {
+            const grid = document.getElementById('timeGrid');
+            grid.innerHTML = '';
+            
+            for (let row = 0; row < 2; row++) {
+                for (let hour = 0; hour < 24; hour++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'time-cell';
+                    
+                    const minute = row === 0 ? '00' : '30';
+                    const timeValue = `${hour.toString().padStart(2, '0')}:${minute}`;
+                    
+                    cell.setAttribute('data-time', timeValue);
+                    cell.title = timeValue;
+                    
+                    cell.onclick = function() {
+                        // Stop any currently playing audio when switching
+                        stopAllAudio();
+                        
+                        if (currentSelectedCell) {
+                            currentSelectedCell.classList.remove('selected');
+                        }
+                        cell.classList.add('selected');
+                        currentSelectedCell = cell;
+                        loadSpectrogram();
+                    };
+                    
+                    grid.appendChild(cell);
+                }
+            }
+        }
+
+        async function loadAvailableTimes() {
+            try {
+                const response = await fetch('/api/available_times');
+                const data = await response.json();
+                availableTimes = data;
+                updateTimeGrid();
+            } catch (error) {
+                console.error('Error loading available times:', error);
+            }
+        }
+
+        function updateTimeGrid() {
+            const currentDate = document.getElementById('date').value;
+            const cells = document.querySelectorAll('.time-cell');
+            
+            cells.forEach(cell => {
+                const time = cell.getAttribute('data-time');
+                cell.classList.remove('available', 'selected');
+                
+                if (availableTimes[currentDate] && availableTimes[currentDate].includes(time)) {
+                    cell.classList.add('available');
+                    
+                    // Re-select the same time if it was previously selected and is available
+                    if (lastSelectedTime === time) {
+                        cell.classList.add('selected');
+                        currentSelectedCell = cell;
+                        // Auto-load the spectrogram
+                        setTimeout(async () => await loadSpectrogram(), 100);
+                    }
+                }
+            });
+            
+            // Clear selection if the time is not available on the new date
+            if (lastSelectedTime && !(availableTimes[currentDate] && availableTimes[currentDate].includes(lastSelectedTime))) {
+                currentSelectedCell = null;
+                lastSelectedTime = null;
+            }
+        }
+
+        async function loadSpectrogram() {
+            const canvas = document.getElementById('spectrogramCanvas');
+            const ctx = canvas.getContext('2d');
+            const errorMessage = document.getElementById('errorMessage');
+            const infoMessage = document.getElementById('infoMessage');
+            
+            const date = document.getElementById('date').value;
+            const selectedCell = document.querySelector('.time-cell.selected');
+            
+            if (!selectedCell) {
+                errorMessage.textContent = 'Please select a time slot from the grid';
+                errorMessage.style.display = 'block';
+                return;
+            }
+            
+            const timeSlot = selectedCell.getAttribute('data-time');
+            
+            // Always use the saved colormap preference
+            const colormap = lastColormap || document.getElementById('colormap').value;
+            console.log('Loading with colormap:', colormap, 'lastColormap:', lastColormap);
+            
+            // Load mel scale data for frequency calculations
+            await loadMelScale();
+            
+            errorMessage.style.display = 'none';
+            infoMessage.style.display = 'none';
+            
+            try {
+                const response = await fetch(`/api/spectrogram?date=${date}&time=${timeSlot}`);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                // Get file path info and initialize audio player
+                try {
+                    const fileInfoResponse = await fetch(`/api/file_info?date=${date}&time=${timeSlot}`);
+                    if (fileInfoResponse.ok) {
+                        const fileInfo = await fileInfoResponse.json();
+                        window.currentFilePath = fileInfo.filepath;
+                        
+                        // Initialize audio player with filename
+                        const spectrogramContainer = document.querySelector('.spectrogram-container');
+                        if (spectrogramContainer && fileInfo.filename) {
+                            // Dispose of existing player
+                            if (audioPlayer) {
+                                audioPlayer.dispose();
+                            }
+                            
+                            // Update container with filename and create new player
+                            spectrogramContainer.dataset.filename = fileInfo.filename;
+                            audioPlayer = new SpectrogramAudioPlayer(spectrogramContainer);
+                            
+                            // Show controls
+                            const controlsPanel = document.querySelector('.control-group.playback-controls');
+                            if (controlsPanel) {
+                                controlsPanel.classList.add('has-audio');
+                            }
+                        }
+                    }
+                } catch (e) {
+                    console.log('Could not fetch file info:', e);
+                }
+                
+                // Fetch weather data
+                try {
+                    const weatherResponse = await fetch(`/api/weather?date=${date}&time=${timeSlot}`);
+                    if (weatherResponse.ok) {
+                        const weatherData = await weatherResponse.json();
+                        updateWeatherDisplay(weatherData);
+                    } else {
+                        clearWeatherDisplay();
+                    }
+                } catch (e) {
+                    console.log('Could not fetch weather data:', e);
+                    clearWeatherDisplay();
+                }
+                
+                const blob = await response.blob();
+                const img = new Image();
+                
+                img.onload = async function() {
+                    try {
+                        canvas.width = img.width;
+                        canvas.height = img.height;
+                        
+                        ctx.drawImage(img, 0, 0);
+                        
+                        // Store original grayscale image data
+                        window.originalImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                        
+                        // Apply saved colormap preference
+                        document.getElementById('colormap').value = colormap;
+                        const coloredImageData = await applyColormap(window.originalImageData, colormap);
+                        
+                        console.log('Applying colormap result:', coloredImageData);
+                        
+                        if (coloredImageData && coloredImageData.data) {
+                            ctx.putImageData(coloredImageData, 0, 0);
+                            
+                            // Apply image adjustments after colormap
+                            applyImageAdjustments(canvas);
+                        } else {
+                            console.error('Invalid ImageData returned from applyColormap');
+                            // Fallback: just draw original grayscale
+                            ctx.putImageData(window.originalImageData, 0, 0);
+                        }
+                        
+                        const deeplinkUrl = `${window.location.origin}${window.location.pathname}?date=${date}&time=${timeSlot}&colormap=${colormap}`;
+                        infoMessage.innerHTML = `Loaded: ${date} ${timeSlot} | ${canvas.width}x${canvas.height} pixels | Colormap: ${colormap} | <a href="${deeplinkUrl}" target="_blank">Deeplink</a>`;
+                        infoMessage.style.display = 'block';
+                        
+                        // Show file path
+                        const filePathMessage = document.getElementById('filePathMessage');
+                        filePathMessage.innerHTML = `File: ${window.currentFilePath || 'Loading...'}`;
+                        filePathMessage.style.display = 'block';
+                        
+                        URL.revokeObjectURL(img.src);
+                    } catch (error) {
+                        console.error('Error in img.onload:', error);
+                        // Fallback: just show the original image
+                        ctx.putImageData(window.originalImageData || ctx.getImageData(0, 0, canvas.width, canvas.height), 0, 0);
+                    }
+                };
+                
+                img.onerror = function() {
+                    errorMessage.textContent = 'Failed to load spectrogram image';
+                    errorMessage.style.display = 'block';
+                    URL.revokeObjectURL(img.src);
+                };
+                
+                img.src = URL.createObjectURL(blob);
+                
+            } catch (error) {
+                loadingMessage.style.display = 'none';
+                errorMessage.textContent = `Error loading spectrogram: ${error.message}`;
+                errorMessage.style.display = 'block';
+            }
+        }
+
+        // Mouse tracking for coordinates and crosshairs
+        document.getElementById('spectrogramCanvas').addEventListener('mousemove', function(event) {
+            const canvas = event.target;
+            const rect = canvas.getBoundingClientRect();
+            const x = Math.round(event.clientX - rect.left);
+            const y = Math.round(event.clientY - rect.top);
+            
+            // Convert y to bottom-left origin (0,0 at bottom left)
+            const yBottomLeft = canvas.height - y;
+            
+            // Update crosshairs
+            const verticalLine = document.getElementById('crosshairVertical');
+            const horizontalLine = document.getElementById('crosshairHorizontal');
+            
+            verticalLine.style.left = x + 'px';
+            verticalLine.style.display = 'block';
+            
+            horizontalLine.style.top = y + 'px';
+            horizontalLine.style.display = 'block';
+            
+            // Calculate frequency using mel scale
+            const frequency = getFrequencyFromPixel(yBottomLeft, canvas.height);
+            
+            // Calculate time within the 15-minute recording
+            const recordingDuration = 15 * 60; // 15 minutes in seconds
+            const timeInRecording = (x / canvas.width) * recordingDuration;
+            
+            // Get base time from current selection and add offset
+            const selectedCell = document.querySelector('.time-cell.selected');
+            if (selectedCell) {
+                const baseTime = selectedCell.getAttribute('data-time');
+                const [baseHour, baseMinute] = baseTime.split(':').map(Number);
+                
+                const totalSeconds = baseHour * 3600 + baseMinute * 60 + timeInRecording;
+                const hours = Math.floor(totalSeconds / 3600) % 24;
+                const minutes = Math.floor((totalSeconds % 3600) / 60);
+                const seconds = Math.floor(totalSeconds % 60);
+                
+                const timeString = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+                
+                // Update coordinate displays
+                document.getElementById('pixelCoords').textContent = `x:${x.toString().padStart(4, '0')} y:${yBottomLeft.toString().padStart(4, '0')}`;
+                document.getElementById('timeCoords').textContent = `Time: ${timeString}`;
+                document.getElementById('freqCoords').textContent = `Freq: ${frequency.toString().padStart(4, '0')} Hz`;
+            }
+        });
+
+        document.getElementById('spectrogramCanvas').addEventListener('mouseleave', function() {
+            // Hide crosshairs
+            document.getElementById('crosshairVertical').style.display = 'none';
+            document.getElementById('crosshairHorizontal').style.display = 'none';
+            
+            // Reset to default values
+            document.getElementById('pixelCoords').textContent = 'x:---- y:----';
+            document.getElementById('timeCoords').textContent = 'Time: --:--:--';
+            document.getElementById('freqCoords').textContent = 'Freq: ---- Hz';
+        });
+
+        document.getElementById('date').addEventListener('change', loadAvailableTimes);
+
+        window.addEventListener('load', function() {
+            console.log('Page loaded, initializing...');
+            
+            // Check for URL parameters for deeplink functionality
+            const urlParams = new URLSearchParams(window.location.search);
+            const paramDate = urlParams.get('date');
+            const paramTime = urlParams.get('time');
+            const paramColormap = urlParams.get('colormap');
+            
+            // Set date from URL parameter or default
+            document.getElementById('date').value = paramDate || '2025-06-20';
+            
+            // Restore saved colormap or use URL parameter
+            const savedColormap = paramColormap || localStorage.getItem('selectedColormap');
+            if (savedColormap) {
+                lastColormap = savedColormap;
+                document.getElementById('colormap').value = savedColormap;
+            }
+            
+            createTimeGrid();
+            loadAvailableTimes().then(() => {
+                // If we have URL parameters, select the specified time
+                if (paramTime) {
+                    const timeCell = document.querySelector(`[data-time="${paramTime}"]`);
+                    if (timeCell && timeCell.classList.contains('available')) {
+                        timeCell.click(); // This will select and load the spectrogram
+                    }
+                }
+            });
+            
+            // Setup gamma control
+            const gammaSlider = document.getElementById('gamma');
+            gammaSlider.addEventListener('input', function() {
+                imageAdjustments.gamma = parseFloat(this.value);
+                updateAdjustmentDisplays();
+                
+                const canvas = document.getElementById('spectrogramCanvas');
+                if (canvas && window.originalImageData) {
+                    // Reapply colormap first, then gamma
+                    const colormap = document.getElementById('colormap').value;
+                    applyColormap(window.originalImageData, colormap).then(coloredImageData => {
+                        const ctx = canvas.getContext('2d');
+                        ctx.putImageData(coloredImageData, 0, 0);
+                        applyImageAdjustments(canvas);
+                    });
+                }
+            });
+            
+            // Double-click to reset gamma
+            gammaSlider.addEventListener('dblclick', resetGamma);
+            
+            // Initialize gamma display
+            updateAdjustmentDisplays();
+        });
+
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', function() {
+            if (audioPlayer) {
+                audioPlayer.dispose();
+            }
+        });
+    </script>
+</body>
+</html>
