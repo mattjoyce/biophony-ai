@@ -8,10 +8,11 @@ import sqlite3
 import os
 from datetime import datetime, date, time
 import json
+import argparse
+import yaml
 from audio_database import AudioDatabase
 
 app = Flask(__name__)
-db = AudioDatabase("audiomoth.db")
 
 @app.route('/')
 def index():
@@ -503,7 +504,26 @@ def upload_labels():
             os.remove(temp_path)
         return jsonify({'error': str(e)}), 500
 
+def load_config(config_path):
+    """Load configuration from YAML file."""
+    with open(config_path, 'r') as file:
+        return yaml.safe_load(file)
+
 if __name__ == '__main__':
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description='AudioMoth Web Interface')
+    parser.add_argument('--config', '-c', 
+                       default='config.yaml',
+                       help='Configuration file path (default: config.yaml)')
+    args = parser.parse_args()
+    
+    # Load configuration
+    config = load_config(args.config)
+    
+    # Initialize database with config path
+    db_path = config.get('database_path', 'audiomoth.db')
+    db = AudioDatabase(db_path)
+    
     # Create templates directory if it doesn't exist
     os.makedirs('templates', exist_ok=True)
     
