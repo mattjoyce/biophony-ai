@@ -19,6 +19,12 @@ def index():
     """Main page with search interface."""
     return render_template('index.html')
 
+@app.route('/easepick_test')
+def easepick_test():
+    """Easepick test page."""
+    return send_file('easepick_test.html')
+
+
 @app.route('/api/files')
 def api_files():
     """API endpoint to search for audio files."""
