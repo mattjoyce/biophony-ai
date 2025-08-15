@@ -6,13 +6,56 @@ AudioMoth Web Interface
 from flask import Flask, render_template, request, jsonify, send_file
 import sqlite3
 import os
-from datetime import datetime, date, time
-import json
+import tempfile
+import uuid
 import argparse
 import yaml
 from audio_database import AudioDatabase
 
 app = Flask(__name__)
+
+def get_conn():
+    """Get database connection with Row factory for named column access."""
+    conn = sqlite3.connect(db.db_path)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+def validate_limit(limit_str, default=100, max_limit=1000):
+    """Validate and return limit parameter."""
+    if limit_str is None:
+        return default
+    try:
+        limit = int(limit_str)
+        if limit < 1 or limit > max_limit:
+            return None  # Invalid range
+        return limit
+    except ValueError:
+        return None  # Invalid integer
+
+def parse_dt(date_str, time_str):
+    """Parse and validate date and time strings."""
+    if not date_str or not time_str:
+        return None
+    
+    try:
+        # Basic format validation - could be enhanced
+        if len(date_str) != 10 or date_str[4] != '-' or date_str[7] != '-':
+            return None
+        if len(time_str) != 5 or time_str[2] != ':':
+            return None
+        
+        # Convert to datetime string for database queries
+        return f"{date_str} {time_str}:00"
+    except (ValueError, IndexError):
+        return None
+
+def ok(data):
+    """Standard success response."""
+    return jsonify({'success': True, 'data': data})
+
+def err(status_code, message):
+    """Standard error response."""
+    return jsonify({'success': False, 'error': message}), status_code
 
 @app.route('/')
 def index():
@@ -28,12 +71,16 @@ def easepick_test():
 @app.route('/api/files')
 def api_files():
     """API endpoint to search for audio files."""
-    # Get query parameters
+    # Validate query parameters
+    limit = validate_limit(request.args.get('limit'))
+    if limit is None:
+        return err(400, 'Invalid limit parameter. Must be integer between 1 and 1000.')
+    
+    # Get other parameters
     date_from = request.args.get('date_from')
     date_to = request.args.get('date_to')
     time_from = request.args.get('time_from')
     time_to = request.args.get('time_to')
-    limit = int(request.args.get('limit', 100))
     
     # Search files
     files = db.search_files(
@@ -52,8 +99,7 @@ def api_grid():
     date_from = request.args.get('date_from')
     date_to = request.args.get('date_to')
     
-    conn = sqlite3.connect(db.db_path)
-    conn.row_factory = sqlite3.Row
+    conn = get_conn()
     cursor = conn.cursor()
     
     # Get all files in date range
@@ -108,7 +154,7 @@ def api_grid():
 @app.route('/api/stats')
 def api_stats():
     """Get database statistics."""
-    conn = sqlite3.connect(db.db_path)
+    conn = get_conn()
     cursor = conn.cursor()
     
     # Get basic stats
@@ -140,8 +186,7 @@ def api_stats():
 @app.route('/api/annotations/<int:file_id>')
 def api_annotations(file_id):
     """Get annotations for a specific file."""
-    conn = sqlite3.connect(db.db_path)
-    conn.row_factory = sqlite3.Row
+    conn = get_conn()
     cursor = conn.cursor()
     
     cursor.execute("""
@@ -158,18 +203,19 @@ def api_annotations(file_id):
 @app.route('/api/spectrogram')
 def api_spectrogram():
     """Serve actual spectrogram image for given date and time."""
-    import sqlite3
     from pathlib import Path
     
     date = request.args.get('date', '2025-06-20')
     time = request.args.get('time', '00:00')
     
-    # Query database for audio file matching date and time
-    conn = sqlite3.connect(db.db_path)
-    cursor = conn.cursor()
+    # Validate date and time format
+    datetime_str = parse_dt(date, time)
+    if datetime_str is None:
+        return err(400, 'Invalid date/time format. Expected YYYY-MM-DD and HH:MM')
     
-    # Convert time format (HH:MM to HHMMSS)
-    time_formatted = f"{time.replace(':', '')}00"
+    # Query database for audio file matching date and time
+    conn = get_conn()
+    cursor = conn.cursor()
     
     cursor.execute("""
         SELECT filepath, filename FROM audio_files 
@@ -212,13 +258,17 @@ def api_spectrogram():
 @app.route('/api/file_info')
 def api_file_info():
     """Get file path info for given date and time."""
-    import sqlite3
     
     date = request.args.get('date', '2025-06-20')
     time = request.args.get('time', '00:00')
     
+    # Validate date and time format
+    datetime_str = parse_dt(date, time)
+    if datetime_str is None:
+        return err(400, 'Invalid date/time format. Expected YYYY-MM-DD and HH:MM')
+    
     # Query database for audio file matching date and time
-    conn = sqlite3.connect(db.db_path)
+    conn = get_conn()
     cursor = conn.cursor()
     
     cursor.execute("""
@@ -244,15 +294,16 @@ def api_file_info():
 @app.route('/api/weather')
 def api_weather():
     """Get weather data for given date and time."""
-    import sqlite3
     
     date = request.args.get('date', '2025-06-20')
     time = request.args.get('time', '00:00')
     
-    # Convert to datetime format for weather lookup
-    datetime_str = f"{date} {time}:00"
+    # Validate and convert to datetime format for weather lookup
+    datetime_str = parse_dt(date, time)
+    if datetime_str is None:
+        return jsonify({'error': 'Invalid date/time format. Expected YYYY-MM-DD and HH:MM'}), 400
     
-    conn = sqlite3.connect(db.db_path)
+    conn = get_conn()
     cursor = conn.cursor()
     
     # First, try to get weather data from audio file's weather_id
@@ -323,9 +374,8 @@ def api_colormap(colormap_name):
 @app.route('/api/available_times')
 def api_available_times():
     """Get available dates and times from the database."""
-    import sqlite3
     
-    conn = sqlite3.connect(db.db_path)
+    conn = get_conn()
     cursor = conn.cursor()
     
     cursor.execute("""
@@ -399,7 +449,7 @@ def api_mel_scale():
 def serve_audio(filename):
     """Serve WAV audio files with proper headers for streaming."""
     # Query database for file path
-    conn = sqlite3.connect(db.db_path)
+    conn = get_conn()
     cursor = conn.cursor()
     
     cursor.execute("SELECT filepath FROM audio_files WHERE filename = ?", (filename,))
@@ -426,21 +476,24 @@ def serve_audio(filename):
 @app.route('/api/navigation')
 def api_navigation():
     """Get next/previous file info based on current date and time."""
-    import sqlite3
-    from datetime import datetime, timedelta
     
     current_date = request.args.get('date')
     current_time = request.args.get('time')
     direction = request.args.get('direction', 'next')  # 'next' or 'prev'
     
     if not current_date or not current_time:
-        return jsonify({'error': 'Date and time required'}), 400
+        return err(400, 'Date and time required')
     
-    conn = sqlite3.connect(db.db_path)
-    cursor = conn.cursor()
+    # Validate date and time format
+    current_datetime = parse_dt(current_date, current_time)
+    if current_datetime is None:
+        return jsonify({'error': 'Invalid date/time format. Expected YYYY-MM-DD and HH:MM'}), 400
     
-    # Current datetime string (using ISO format to match database)
+    # Convert to ISO format for database queries  
     current_datetime = f"{current_date}T{current_time}:00"
+    
+    conn = get_conn()
+    cursor = conn.cursor()
     
     if direction == 'next':
         # Find next file chronologically
@@ -483,22 +536,34 @@ def api_navigation():
 def upload_labels():
     """Upload Audacity label file."""
     if 'file' not in request.files:
-        return jsonify({'error': 'No file provided'}), 400
+        return err(400, 'No file provided')
     
     file = request.files['file']
     audio_filepath = request.form.get('audio_filepath')
     
     if not audio_filepath:
-        return jsonify({'error': 'No audio file path provided'}), 400
+        return err(400, 'No audio file path provided')
     
-    # Save uploaded file temporarily
-    temp_path = f"/tmp/{file.filename}"
-    file.save(temp_path)
+    # Create secure temporary file with UUID
+    file_uuid = str(uuid.uuid4())
+    temp_file = None
+    temp_path = None
     
     try:
+        # Use secure temporary file
+        temp_file = tempfile.NamedTemporaryFile(
+            mode='w+b',
+            suffix=f'_{file_uuid}.txt',
+            delete=False
+        )
+        temp_path = temp_file.name
+        
+        # Save uploaded content to temp file
+        file.save(temp_path)
+        temp_file.close()
+        
         # Import labels
         success = db.import_audacity_labels(temp_path, audio_filepath)
-        os.remove(temp_path)
         
         if success:
             return jsonify({'success': True})
@@ -506,9 +571,14 @@ def upload_labels():
             return jsonify({'error': 'Failed to import labels'}), 500
     
     except Exception as e:
-        if os.path.exists(temp_path):
-            os.remove(temp_path)
         return jsonify({'error': str(e)}), 500
+    
+    finally:
+        # Ensure cleanup in all cases
+        if temp_file:
+            temp_file.close()
+        if temp_path and os.path.exists(temp_path):
+            os.remove(temp_path)
 
 def load_config(config_path):
     """Load configuration from YAML file."""
