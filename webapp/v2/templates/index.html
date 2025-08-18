@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AudioMoth Spectrogram Viewer</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/@easepick/bundle@1.2.1/dist/index.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/howler/2.2.3/howler.min.js"></script>
+</head>
+<body>
+    <div class="app">
+        <header class="controls">
+            <div class="date-control">
+                <label>Date:</label>
+                <input type="text" id="date-picker" readonly>
+            </div>
+            <div class="colormap-control">
+                <label>Colormap:</label>
+                <select id="colormap-selector">
+                    <option value="viridis">Viridis</option>
+                    <option value="plasma">Plasma</option>
+                    <option value="inferno">Inferno</option>
+                    <option value="grayscale">Grayscale</option>
+                </select>
+            </div>
+            <div class="gamma-control">
+                <label>Gamma:</label>
+                <input type="range" id="gamma-slider" min="0.1" max="3.0" value="1.0" step="0.1">
+                <span id="gamma-value">1.0</span>
+            </div>
+        </header>
+        
+        <main class="viewer">
+            <div id="timeline-container" class="timeline"></div>
+            
+            <div id="navigation-container" class="navigation">
+                <div class="nav-controls">
+                    <button id="prev-day" class="nav-btn nav-day" title="Previous Day (same time)">‹‹</button>
+                    <button id="prev-file" class="nav-btn nav-file" title="Previous File">‹</button>
+                    <div class="current-file-info">
+                        <span id="current-file-display">No file selected</span>
+                    </div>
+                    <button id="next-file" class="nav-btn nav-file" title="Next File">›</button>
+                    <button id="next-day" class="nav-btn nav-day" title="Next Day (same time)">››</button>
+                </div>
+            </div>
+            
+            <div class="viewer-layout">
+                <div class="info-panels">
+                    <div class="coordinates-panel">
+                        <h4>Cursor Position</h4>
+                        <div id="pixel-coords">x:---- y:----</div>
+                        <div id="time-coords">Time: --:--:--</div>
+                        <div id="freq-coords">Freq: ---- Hz</div>
+                        <div id="rgb-coords">RGB: --- --- ---</div>
+                    </div>
+                    <div class="weather-panel">
+                        <h4>Weather Data</h4>
+                        <div id="temperature">Temp: --°C</div>
+                        <div id="humidity">Humidity: --%</div>
+                        <div id="wind-speed">Wind: -- km/h</div>
+                        <div id="precipitation">Rain: -- mm</div>
+                    </div>
+                    
+                    <div class="audio-panel">
+                        <h4>Audio</h4>
+                        <div class="audio-controls-mini">
+                            <button id="play-pause">▶</button>
+                            <button id="stop">⏹</button>
+                            <span id="time-display">00:00 / 15:00</span>
+                        </div>
+                    </div>
+                    
+                    <div id="rgb-picker-container"></div>
+                </div>
+                
+                <div id="spectrogram-container" class="spectrogram">
+                    <div class="canvas-wrapper">
+                        <div id="rgb-strip-container"></div>
+                        <canvas id="spectrogram-canvas"></canvas>
+                        <div id="crosshair-vertical" class="crosshair-vertical"></div>
+                        <div id="crosshair-horizontal" class="crosshair-horizontal"></div>
+                        <div id="playback-cursor" class="cursor"></div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+    
+    <script type="module" src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>

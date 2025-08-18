@@ -1,0 +1,6 @@
+Flask==3.0.0
+SQLAlchemy==2.0.23
+PyYAML==6.0.1
+Pillow==10.1.0
+numpy==1.25.2
+matplotlib==3.8.2
