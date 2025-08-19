@@ -15,6 +15,15 @@ weather:
     - weather_code            # WMO code - Overall weather conditions
     - cloud_cover             # % - Affects nighttime cooling
     - pressure_msl            # hPa - Influences animal behavior
+    
+  # Sunrise/sunset data (automatically fetched for bioacoustic temporal analysis)
+  # Provides sunrise/sunset times and generates temporal labels like:
+  # - "SR+02:30" (2.5 hours after sunrise) - Dawn chorus analysis
+  # - "SS-01:15" (1.25 hours before sunset) - Dusk activity patterns  
+  # - "SS+04:00" (4 hours after sunset) - Nocturnal behavior
+  sunrise_sunset:
+    enabled: true              # Automatically enabled - fetches daily sunrise/sunset
+    temporal_labels: true      # Generate time_since_last/time_to_next labels
   
   # Temporal alignment settings
   temporal:

@@ -266,9 +266,20 @@ BiophonyAI builds upon excellent open-source projects:
 - **[PyTorch Audio](https://pytorch.org/audio/)** - GPU-accelerated audio processing
 - **[Open-Meteo](https://open-meteo.com/)** - Weather data integration
 
+## 📖 Research Documentation
+
+### Core Analysis Guides
+- **[SPECTRAL_ANALYSIS_GUIDE.md](SPECTRAL_ANALYSIS_GUIDE.md)** - Comprehensive spectral analysis capabilities, acoustic indices, and mel-scale processing
+- **[WEBAPP_V2_API_GUIDE.md](WEBAPP_V2_API_GUIDE.md)** - Complete REST API documentation for research integration and custom workflows
+- **[BIOACOUSTIC_TEMPORAL_ANALYSIS.md](BIOACOUSTIC_TEMPORAL_ANALYSIS.md)** - Sunrise/sunset temporal labeling and ecological time period analysis
+
+### Developer Resources
+- **[DATABASE_DEVELOPER_GUIDE.md](DATABASE_DEVELOPER_GUIDE.md)** - Database schema, views, and query optimization
+- **[CLAUDE.md](CLAUDE.md)** - Project instructions and configuration guidelines
+
 ## 📞 Support
 
-- 📖 **Documentation**: See `CLAUDE.md` and `DATABASE_DEVELOPER_GUIDE.md`
+- 📖 **Documentation**: See research guides above for comprehensive analysis capabilities
 - 🐛 **Issues**: [GitHub Issues](https://github.com/mattjoyce/biophony-ai/issues)
 - 💬 **Discussions**: [GitHub Discussions](https://github.com/mattjoyce/biophony-ai/discussions)
 

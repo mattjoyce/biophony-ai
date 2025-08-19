@@ -21,7 +21,7 @@ CREATE TABLE audio_files (
             comment TEXT,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        , spectrogram_min REAL, spectrogram_max REAL, aci_min REAL, aci_max REAL, aci_mean REAL, weather_id INTEGER REFERENCES weather_data(id), site_id INTEGER REFERENCES weather_sites(id), npz_filepath TEXT);
+        , spectrogram_min REAL, spectrogram_max REAL, aci_min REAL, aci_max REAL, aci_mean REAL, weather_id INTEGER REFERENCES weather_data(id), site_id INTEGER REFERENCES weather_sites(id), npz_filepath TEXT, time_since_last TEXT, time_to_next TEXT);
 CREATE TABLE sqlite_sequence(name,seq);
 CREATE TABLE annotations (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -60,7 +60,7 @@ CREATE TABLE weather_data (
                     weather_code INTEGER,
                     cloud_cover REAL,
                     pressure_msl REAL,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, sunrise_time TEXT, sunset_time TEXT,
                     UNIQUE(site_id, datetime)
                 );
 CREATE TABLE index_configurations (
@@ -99,36 +99,6 @@ CREATE INDEX idx_core_type ON acoustic_indices_core(processing_type)
             ;
 CREATE INDEX idx_core_name ON acoustic_indices_core(index_name)
             ;
-CREATE VIEW acoustic_indices AS
-                SELECT 
-                    ai.id,
-                    ai.file_id,
-                    af.filepath as wav_filepath,
-                    af.npz_filepath,
-                    ai.index_name,
-                    ai.chunk_index,
-                    ai.start_time_sec,
-                    ai.value,
-                    ai.processing_type,
-                    ai.computed_at
-                FROM acoustic_indices_core ai
-                JOIN audio_files af ON ai.file_id = af.id
-/* acoustic_indices(id,file_id,wav_filepath,npz_filepath,index_name,chunk_index,start_time_sec,value,processing_type,computed_at) */;
-CREATE VIEW indices_by_file AS
-                SELECT 
-                    af.filename,
-                    af.filepath as wav_filepath,
-                    af.npz_filepath,
-                    ai.index_name,
-                    ai.chunk_index,
-                    ai.start_time_sec,
-                    ai.value,
-                    ai.processing_type,
-                    ai.computed_at
-                FROM acoustic_indices_core ai
-                JOIN audio_files af ON ai.file_id = af.id
-                ORDER BY af.filepath, ai.index_name, ai.chunk_index
-/* indices_by_file(filename,wav_filepath,npz_filepath,index_name,chunk_index,start_time_sec,value,processing_type,computed_at) */;
 CREATE VIEW index_statistics AS
                 SELECT 
                     ai.processing_type,
@@ -143,3 +113,80 @@ CREATE VIEW index_statistics AS
                 FROM acoustic_indices_core ai
                 GROUP BY ai.processing_type, ai.index_name
 /* index_statistics(processing_type,index_name,measurement_count,file_count,min_value,max_value,avg_value,first_computed,last_computed) */;
+CREATE VIEW acoustic_indices AS
+SELECT 
+    ai.id,
+    ai.file_id,
+    af.filepath as wav_filepath,
+    af.npz_filepath,
+    af.recording_datetime,
+    af.time_since_last,
+    af.time_to_next,
+    ai.index_name,
+    ai.chunk_index,
+    ai.start_time_sec,
+    ai.value,
+    ai.processing_type,
+    ai.computed_at,
+    wd.temperature_2m,
+    wd.relative_humidity_2m,
+    wd.sunrise_time,
+    wd.sunset_time
+FROM acoustic_indices_core ai
+JOIN audio_files af ON ai.file_id = af.id
+LEFT JOIN weather_data wd ON af.weather_id = wd.id
+/* acoustic_indices(id,file_id,wav_filepath,npz_filepath,recording_datetime,time_since_last,time_to_next,index_name,chunk_index,start_time_sec,value,processing_type,computed_at,temperature_2m,relative_humidity_2m,sunrise_time,sunset_time) */;
+CREATE VIEW indices_by_file AS
+SELECT 
+    af.filename,
+    af.filepath as wav_filepath,
+    af.npz_filepath,
+    af.recording_datetime,
+    af.time_since_last,
+    af.time_to_next,
+    ai.index_name,
+    ai.chunk_index,
+    ai.start_time_sec,
+    ai.value,
+    ai.processing_type,
+    ai.computed_at,
+    wd.temperature_2m,
+    wd.relative_humidity_2m,
+    wd.sunrise_time,
+    wd.sunset_time
+FROM acoustic_indices_core ai
+JOIN audio_files af ON ai.file_id = af.id
+LEFT JOIN weather_data wd ON af.weather_id = wd.id
+ORDER BY af.filepath, ai.index_name, ai.chunk_index
+/* indices_by_file(filename,wav_filepath,npz_filepath,recording_datetime,time_since_last,time_to_next,index_name,chunk_index,start_time_sec,value,processing_type,computed_at,temperature_2m,relative_humidity_2m,sunrise_time,sunset_time) */;
+CREATE VIEW bioacoustic_temporal AS
+SELECT 
+    af.id,
+    af.filename,
+    af.filepath,
+    af.recording_datetime,
+    af.time_since_last,
+    af.time_to_next,
+    af.audiomoth_id,
+    wd.sunrise_time,
+    wd.sunset_time,
+    wd.temperature_2m,
+    wd.relative_humidity_2m,
+    wd.precipitation,
+    wd.wind_speed_10m,
+    ws.name as site_name,
+    ws.latitude,
+    ws.longitude,
+    CASE 
+        WHEN af.time_since_last LIKE 'SR+%' AND CAST(SUBSTR(af.time_since_last, 4, 2) AS INTEGER) <= 2 THEN 'Dawn'
+        WHEN af.time_since_last LIKE 'SS+%' AND CAST(SUBSTR(af.time_since_last, 4, 2) AS INTEGER) <= 2 THEN 'Dusk'
+        WHEN af.time_since_last LIKE 'SR+%' AND CAST(SUBSTR(af.time_since_last, 4, 2) AS INTEGER) BETWEEN 3 AND 12 THEN 'Day'
+        WHEN af.time_since_last LIKE 'SS+%' AND CAST(SUBSTR(af.time_since_last, 4, 2) AS INTEGER) BETWEEN 3 AND 12 THEN 'Evening'
+        ELSE 'Night'
+    END as bioacoustic_period
+FROM audio_files af
+LEFT JOIN weather_data wd ON af.weather_id = wd.id
+LEFT JOIN weather_sites ws ON af.site_id = ws.id
+WHERE af.time_since_last IS NOT NULL
+ORDER BY af.recording_datetime
+/* bioacoustic_temporal(id,filename,filepath,recording_datetime,time_since_last,time_to_next,audiomoth_id,sunrise_time,sunset_time,temperature_2m,relative_humidity_2m,precipitation,wind_speed_10m,site_name,latitude,longitude,bioacoustic_period) */;
