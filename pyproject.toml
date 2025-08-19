@@ -1,0 +1,141 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "biophony-ai"
+version = "0.1.0"
+description = "GPU-accelerated bioacoustic analysis platform for ecological research"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [
+    {name = "Matt Joyce", email = "mattjoyce@example.com"}
+]
+keywords = ["bioacoustics", "ecology", "audio-analysis", "gpu", "research"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Multimedia :: Sound/Audio :: Analysis",
+]
+requires-python = ">=3.9"
+dependencies = [
+    # Core packages
+    "numpy>=1.24.0",
+    "pandas>=2.0.0",
+    "PyYAML>=6.0",
+    
+    # Audio processing
+    "torch>=2.0.0",
+    "torchaudio>=2.0.0",
+    "metamoth>=1.0.0",
+    
+    # Image processing
+    "Pillow>=10.0.0",
+    "matplotlib>=3.7.0",
+    "seaborn>=0.12.0",
+    
+    # Web framework
+    "Flask>=2.3.0",
+    "SQLAlchemy>=2.0.0",
+    
+    # HTTP and API clients
+    "requests>=2.31.0",
+    "openmeteo-requests>=1.0.0",
+    "requests-cache>=1.0.0",
+    "retry-requests>=2.0.0",
+    
+    # File processing
+    "filelock>=3.12.0",
+    
+    # Scientific computing
+    "scipy>=1.11.0",
+    "scikit-learn>=1.3.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-cov>=4.1.0",
+    "black>=23.0.0",
+    "isort>=5.12.0",
+    "flake8>=6.0.0",
+    "mypy>=1.5.0",
+]
+webapp = [
+    "gunicorn>=21.0.0",
+    "waitress>=3.0.0",
+]
+research = [
+    "jupyter>=1.0.0",
+    "ipykernel>=6.25.0",
+    "plotly>=5.15.0",
+    "scikit-maad>=1.4.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/mattjoyce/biophony-ai"
+Repository = "https://github.com/mattjoyce/biophony-ai"
+Documentation = "https://github.com/mattjoyce/biophony-ai/blob/master/README.md"
+Issues = "https://github.com/mattjoyce/biophony-ai/issues"
+
+[project.scripts]
+biophony-scan = "scan_audio_database:main"
+biophony-indices = "process_acoustic_indices:main"
+biophony-spectrograms = "generate_spectrograms_gpu_optimized:main"
+biophony-webapp = "webapp.v2.backend.app:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["*"]
+exclude = ["tests*", "docs*", "venv*", ".venv*"]
+
+[tool.setuptools.package-data]
+"*" = ["*.yaml", "*.yml", "*.json", "*.md"]
+
+[tool.black]
+line-length = 88
+target-version = ['py39']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | venv
+  | _build
+  | buck-out
+  | build
+  | dist
+)/
+'''
+
+[tool.isort]
+profile = "black"
+multi_line_output = 3
+line_length = 88
+
+[tool.mypy]
+python_version = "3.9"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
+python_classes = "Test*"
+python_functions = "test_*"
+addopts = "--verbose --cov=. --cov-report=html --cov-report=term-missing"

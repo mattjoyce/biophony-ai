@@ -1,0 +1,39 @@
+# Core Python packages
+numpy>=1.24.0
+pandas>=2.0.0
+PyYAML>=6.0
+
+# Audio processing
+torch>=2.0.0
+torchaudio>=2.0.0
+metamoth>=1.0.0
+
+# Image processing  
+Pillow>=10.0.0
+matplotlib>=3.7.0
+seaborn>=0.12.0
+
+# Web framework (Flask webapp)
+Flask>=2.3.0
+SQLAlchemy>=2.0.0
+
+# HTTP and API clients
+requests>=2.31.0
+openmeteo-requests>=1.0.0
+requests-cache>=1.0.0
+retry-requests>=2.0.0
+
+# File processing and utilities
+filelock>=3.12.0
+pathlib-shim>=1.1.0
+
+# Development and testing
+pytest>=7.4.0
+pytest-cov>=4.1.0
+
+# Optional: Scientific computing
+scipy>=1.11.0
+scikit-learn>=1.3.0
+
+# Database utilities
+sqlite3-utils>=3.34.0
