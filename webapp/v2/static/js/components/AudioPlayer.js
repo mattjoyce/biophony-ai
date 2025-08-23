@@ -303,6 +303,14 @@ export class AudioPlayer {
     }
     
     /**
+     * Seek to a specific time and start playback
+     * @param {number} timeOffset - Time in seconds
+     */
+    seekToTime(timeOffset) {
+        this.playAtTime(timeOffset);
+    }
+    
+    /**
      * Destroy the audio player
      */
     destroy() {

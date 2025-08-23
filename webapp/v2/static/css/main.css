@@ -1,5 +1,227 @@
 /* AudioMoth Spectrogram Viewer - Main Styles */
 
+/* Top Navigation */
+.top-nav {
+    background: #f8f9fa;
+    border-bottom: 1px solid #e0e0e0;
+    padding: 0;
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+}
+
+.nav-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 1rem;
+}
+
+.nav-brand {
+    font-weight: 600;
+    font-size: 1.1rem;
+    color: #333;
+    text-decoration: none;
+}
+
+.nav-brand:hover {
+    color: #007bff;
+}
+
+.nav-links {
+    display: flex;
+    gap: 1rem;
+}
+
+.nav-link {
+    color: #666;
+    text-decoration: none;
+    padding: 0.25rem 0.5rem;
+    border-radius: 3px;
+    transition: background-color 0.2s ease;
+}
+
+.nav-link:hover {
+    background: #e9ecef;
+    color: #333;
+}
+
+.nav-link.active {
+    background: #007bff;
+    color: white;
+}
+
+/* Adjust app layout to account for nav */
+.app {
+    padding-top: 0;
+}
+
+/* POI Page Styles */
+.poi-app {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 2rem;
+}
+
+.poi-header {
+    text-align: center;
+    margin-bottom: 2rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid #e0e0e0;
+}
+
+.poi-header h1 {
+    margin: 0 0 0.5rem 0;
+    color: #333;
+}
+
+.poi-header p {
+    margin: 0;
+    color: #666;
+    font-size: 1.1rem;
+}
+
+.goals-container {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+}
+
+.goal-section {
+    background: white;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.goal-header {
+    background: #f8f9fa;
+    padding: 1rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #e0e0e0;
+}
+
+.goal-header h2 {
+    margin: 0;
+    color: #333;
+    font-size: 1.3rem;
+}
+
+.goal-date {
+    color: #666;
+    font-size: 0.9rem;
+}
+
+.goal-description {
+    padding: 1rem;
+    margin: 0;
+    color: #555;
+    font-style: italic;
+    background: #f8f9fa;
+    border-bottom: 1px solid #e0e0e0;
+}
+
+.poi-list {
+    padding: 1rem;
+}
+
+.poi-item {
+    margin-bottom: 1.5rem;
+    padding: 1rem;
+    background: #f9f9f9;
+    border-radius: 6px;
+    border-left: 4px solid #007bff;
+}
+
+.poi-item:last-child {
+    margin-bottom: 0;
+}
+
+.poi-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+}
+
+.poi-header h4 {
+    margin: 0;
+    color: #333;
+}
+
+.poi-confidence {
+    background: #28a745;
+    color: white;
+    padding: 0.2rem 0.5rem;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.poi-notes {
+    margin: 0.5rem 0;
+    color: #555;
+    font-size: 0.95rem;
+}
+
+.poi-anchor {
+    margin: 0.5rem 0;
+    color: #666;
+    font-size: 0.9rem;
+    font-style: italic;
+}
+
+.poi-spans {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 1rem;
+}
+
+.poi-span {
+    flex: 1;
+    min-width: 200px;
+}
+
+.poi-link {
+    display: block;
+    padding: 0.75rem;
+    background: white;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    text-decoration: none;
+    color: #333;
+    transition: all 0.2s ease;
+}
+
+.poi-link:hover {
+    background: #e9ecef;
+    border-color: #007bff;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.poi-link strong {
+    color: #007bff;
+}
+
+.no-pois, .no-goals {
+    text-align: center;
+    color: #666;
+    font-style: italic;
+    padding: 2rem;
+}
+
+.no-goals {
+    background: #f8f9fa;
+    border-radius: 8px;
+    border: 1px solid #e0e0e0;
+}
+
 /* RGB Picker Styles - Compact Version */
 .rgb-picker {
     background: white;
@@ -407,10 +629,10 @@ body {
     background: white;
     border: 1px solid #e0e0e0;
     border-radius: 8px;
+    display: flex;
+    flex-direction: column;
     position: relative;
     overflow: hidden;
-    display: flex;
-    align-items: flex-start;
     justify-content: center;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
     min-height: 300px;
@@ -642,6 +864,41 @@ div[data-easepick],
 /* Ensure easepick calendar appears over spectrogram and other elements */
 .easepick-wrapper * {
     z-index: inherit !important;
+}
+
+/* POI Strips Styling */
+.poi-strips-container {
+    position: relative;
+    width: 100%;
+    min-height: 10px;
+    margin-top: 5px;
+}
+
+.poi-strip {
+    position: absolute;
+    height: 20px;
+    border-radius: 2px;
+    cursor: pointer;
+    transition: opacity 0.2s ease;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.poi-strip:hover {
+    opacity: 0.8;
+}
+
+.poi-tooltip {
+    position: absolute;
+    background: rgba(0, 0, 0, 0.9);
+    color: white;
+    padding: 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    pointer-events: none;
+    z-index: 1000;
+    max-width: 300px;
+    display: none;
+    line-height: 1.4;
 }
 
 /* Force easepick to create its own stacking context above everything */

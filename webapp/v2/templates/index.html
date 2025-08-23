@@ -9,6 +9,15 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/howler/2.2.3/howler.min.js"></script>
 </head>
 <body>
+    <nav class="top-nav">
+        <div class="nav-container">
+            <a href="/" class="nav-brand">AudioMoth Viewer</a>
+            <div class="nav-links">
+                <a href="/" class="nav-link">Spectrogram</a>
+                <a href="/poi" class="nav-link">Points of Interest</a>
+            </div>
+        </div>
+    </nav>
     <div class="app">
         <header class="controls">
             <div class="date-control">
@@ -83,6 +92,7 @@
                         <div id="crosshair-horizontal" class="crosshair-horizontal"></div>
                         <div id="playback-cursor" class="cursor"></div>
                     </div>
+                    <div id="poi-strips-container"></div>
                 </div>
             </div>
         </main>

@@ -467,6 +467,26 @@ class SpectralIndicesProcessor(AcousticIndex):
             fn_local = np.linspace(0, self.sample_rate/2, chunk.shape[0])
             return features.spectral_leq(chunk, tn, fn_local)
         
+        elif processor_name == 'maad_spectral_activity':
+            # MAAD spectral activity index (AAI spectral component)
+            # This is the spectral component of the Audio Activity Index
+            # Get frequency parameters from params dict if provided
+            freq_min = params.get('freq_min')
+            freq_max = params.get('freq_max')
+            
+            if freq_min is not None and freq_max is not None:
+                # Apply frequency filtering by creating a mask for the desired frequency range
+                freq_mask = (fn >= freq_min) & (fn <= freq_max)
+                if np.any(freq_mask):
+                    # Extract frequency band and compute spectral activity
+                    band_chunk = chunk[freq_mask, :]
+                    return float(features.spectral_activity(band_chunk))
+                else:
+                    return 0.0
+            else:
+                # No frequency filtering, use full spectrum
+                return float(features.spectral_activity(chunk))
+        
         else:
             raise ValueError(f"Unsupported processor: {processor_name}")
     

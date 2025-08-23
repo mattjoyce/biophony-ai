@@ -4,10 +4,12 @@ Files API endpoints for AudioMoth Spectrogram Viewer
 Handles file-related API requests
 """
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, send_file
 from typing import Dict, Any
+import io
 
 from services.file_service import FileService
+from services.poi_strips_service import POIStripsService
 
 
 files_bp = Blueprint('files', __name__)
@@ -156,3 +158,77 @@ def get_available_times():
         
     except Exception as e:
         return create_error_response(500, f"Failed to get available times: {str(e)}")
+
+
+@files_bp.route('/api/files/search')
+def search_file_by_name():
+    """Search for a specific file by filename"""
+    try:
+        filename = request.args.get('filename')
+        if not filename:
+            return create_error_response(400, 'Filename parameter is required')
+        
+        file_info = FileService.get_file_by_filename(filename)
+        if not file_info:
+            return create_error_response(404, f'File not found: {filename}')
+        
+        return create_success_response(file_info)
+        
+    except Exception as e:
+        return create_error_response(500, f"Failed to search file: {str(e)}")
+
+
+@files_bp.route('/api/files/id/<int:file_id>')
+def get_file_by_id(file_id: int):
+    """Get file information by file_id"""
+    try:
+        file_info = FileService.get_file_by_id(file_id)
+        if not file_info:
+            return create_error_response(404, f'File not found with ID: {file_id}')
+        
+        return create_success_response(file_info)
+        
+    except Exception as e:
+        return create_error_response(500, f"Failed to get file by ID: {str(e)}")
+
+
+@files_bp.route('/api/file/<date>/<time>/pois')
+def get_file_pois(date: str, time: str):
+    """Get POI spans for a specific file"""
+    try:
+        pois = FileService.get_pois_for_file(date, time)
+        return create_success_response(pois)
+    except ValueError as e:
+        return create_error_response(400, str(e))
+    except Exception as e:
+        return create_error_response(500, f"Failed to get POIs for file: {str(e)}")
+
+
+@files_bp.route('/api/poi-strips/<date>/<time>')
+def get_poi_strips_png(date: str, time: str):
+    """Get POI strips as PNG image matching spectrogram dimensions"""
+    try:
+        # Get query parameters
+        colormap = request.args.get('colormap', 'viridis')
+        
+        # Generate POI strips PNG
+        image_data = POIStripsService.generate_poi_strips_png(date, time, colormap)
+        
+        if not image_data:
+            return create_error_response(404, f'No POI strips found for {date} {time}')
+        
+        # Create file-like object and serve
+        image_io = io.BytesIO(image_data)
+        image_io.seek(0)
+        
+        return send_file(
+            image_io,
+            mimetype='image/png',
+            as_attachment=False,
+            download_name=f'poi_strips_{date}_{time}.png'
+        )
+        
+    except ValueError as e:
+        return create_error_response(400, str(e))
+    except Exception as e:
+        return create_error_response(500, f"Failed to get POI strips: {str(e)}")

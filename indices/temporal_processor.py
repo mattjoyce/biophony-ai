@@ -278,6 +278,12 @@ class TemporalIndicesProcessor(AcousticIndex):
         elif processor_name == 'temporal_median':
             return float(features.temporal_median(chunk))
         
+        elif processor_name == 'maad_temporal_activity':
+            # MAAD temporal activity index (AAI temporal component)
+            # This is the temporal component of the Audio Activity Index
+            activity, count, mean_db = features.temporal_activity(chunk)
+            return float(activity)
+        
         else:
             raise ValueError(f"Unsupported temporal processor: {processor_name}")
     

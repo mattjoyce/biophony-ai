@@ -14,9 +14,19 @@ from typing import List
 import torch
 import yaml
 from filelock import FileLock, Timeout
+from rich.console import Console
+from rich.progress import Progress, TaskID, SpinnerColumn, BarColumn, TextColumn, TimeRemainingColumn, MofNCompleteColumn
+from rich.table import Table
+from rich.panel import Panel
+from rich.text import Text
+from rich.rule import Rule
+from rich import box
 
 from indices import DatabaseManager, SpectralIndicesProcessor, TemporalIndicesProcessor
 from spectrogram_utils import find_all_wav_files
+
+# Initialize Rich console
+console = Console()
 
 
 def parse_arguments():
@@ -63,16 +73,18 @@ def parse_arguments():
 
 def load_config(config_path: str) -> dict:
     """Load configuration from YAML file and store config in database"""
-    with open(config_path, "r") as file:
-        config = yaml.safe_load(file)
+    with console.status(f"[bold blue]Loading configuration from {config_path}..."):
+        with open(config_path, "r") as file:
+            config = yaml.safe_load(file)
 
     # Store configuration in database for future reference
     try:
         config_name = os.path.basename(config_path)
         db_manager = DatabaseManager(config.get("database_path", "audiomoth.db"))
         db_manager.store_index_configuration(config_name, config)
+        console.print(f"[green]✓[/green] Configuration loaded and stored: {config_name}")
     except Exception as e:
-        print(f"⚠️  Could not store configuration: {e}")
+        console.print(f"[yellow]⚠️  Could not store configuration: {e}[/yellow]")
 
     return config
 
@@ -81,27 +93,28 @@ def setup_device() -> torch.device:
     """Setup processing device with GPU if available"""
     if torch.cuda.is_available():
         device = torch.device("cuda")
-        print(f"✓ Using GPU: {torch.cuda.get_device_name()}")
+        console.print(f"[green]✓[/green] Using GPU: [bold]{torch.cuda.get_device_name()}[/bold]")
         torch.cuda.empty_cache()
     else:
         device = torch.device("cpu")
-        print("✓ Using CPU for processing")
+        console.print("[green]✓[/green] Using CPU for processing")
 
     return device
 
 
 def find_files_by_type(root_dir: str, processing_type: str) -> List[str]:
     """Find files based on processing type"""
-    if processing_type == "temporal":
-        files = find_all_wav_files(root_dir)
-        print(f"Found {len(files)} WAV files for temporal processing")
-        return files
-    elif processing_type == "spectral":
-        files = find_all_npz_files(root_dir)
-        print(f"Found {len(files)} NPZ files for spectral processing")
-        return files
-    else:
-        raise ValueError(f"Unknown processing type: {processing_type}")
+    with console.status(f"[bold blue]Searching for {processing_type} files in {root_dir}..."):
+        if processing_type == "temporal":
+            files = find_all_wav_files(root_dir)
+            console.print(f"[green]Found {len(files)} WAV files for temporal processing[/green]")
+            return files
+        elif processing_type == "spectral":
+            files = find_all_npz_files(root_dir)
+            console.print(f"[green]Found {len(files)} NPZ files for spectral processing[/green]")
+            return files
+        else:
+            raise ValueError(f"Unknown processing type: {processing_type}")
 
 
 def find_all_npz_files(root_dir: str) -> List[str]:
@@ -135,22 +148,34 @@ def create_dry_run_report(
         target_files: Files that would be processed
         all_files: All files found
     """
-    print(f"\n📊 DRY-RUN REPORT:")
-    print(f"🎯 Processing type: {processing_type.upper()}")
-    print(f"📁 Files found: {len(all_files)} total")
-    print(
-        f"🔍 Files in target: {len(target_files)} ({len(target_files)/len(all_files)*100:.1f}%)"
-    )
+    console.print()
+    console.rule("[bold blue]DRY-RUN REPORT", style="blue")
+    
+    # Create summary table
+    summary_table = Table(title="Processing Summary", box=box.ROUNDED)
+    summary_table.add_column("Metric", style="cyan", no_wrap=True)
+    summary_table.add_column("Value", style="magenta")
+    
+    summary_table.add_row("Processing Type", processing_type.upper())
+    summary_table.add_row("Total Files Found", str(len(all_files)))
+    summary_table.add_row("Files in Target", f"{len(target_files)} ({len(target_files)/len(all_files)*100:.1f}%)")
+    
+    console.print(summary_table)
 
     # Get enabled indices from config
     indices_config = config.get("acoustic_indices", {}).get(processing_type, {})
 
+    # Create indices table
+    indices_table = Table(title="Configured Indices", box=box.ROUNDED)
+    indices_table.add_column("Index Name", style="green")
+    indices_table.add_column("Processor", style="blue")
+    indices_table.add_column("Parameters", style="yellow")
+
     if "enabled" in indices_config:
         # Legacy format
         enabled_indices = indices_config.get("enabled", [])
-        print(f"📋 Indices (legacy format): {len(enabled_indices)}")
         for idx in enabled_indices:
-            print(f"   - {idx}")
+            indices_table.add_row(idx, "legacy", "N/A")
     else:
         # New generalized format
         named_indices = {
@@ -158,13 +183,15 @@ def create_dry_run_report(
             for k, v in indices_config.items()
             if isinstance(v, dict) and "processor" in v
         }
-        print(f"📋 Named indices (generalized format): {len(named_indices)}")
         for name, idx_config in named_indices.items():
             processor = idx_config["processor"]
             params = idx_config.get("params", {})
-            print(f"   - {name}: {processor} {params}")
+            params_str = str(params) if params else "None"
+            indices_table.add_row(name, processor, params_str)
 
-    # Estimate processing time (rough estimate: 3-5 seconds per file per index)
+    console.print(indices_table)
+
+    # Estimate processing time
     if target_files:
         indices_count = (
             len(enabled_indices) if "enabled" in indices_config else len(named_indices)
@@ -173,12 +200,23 @@ def create_dry_run_report(
             avg_time_per_file = 4.0  # seconds (rough estimate)
             total_time_sec = len(target_files) * avg_time_per_file
             total_time_min = total_time_sec / 60
-            print(f"⏱️  Estimated processing time: {total_time_min:.1f} minutes")
+            
+            # Create timing panel
+            timing_text = f"[green]⏱️  Estimated processing time: {total_time_min:.1f} minutes[/green]\n"
+            timing_text += f"[yellow]📊 Rate: ~{avg_time_per_file:.1f}s per file[/yellow]\n"
+            timing_text += f"[blue]🔢 Indices per file: {indices_count}[/blue]"
+            
+            timing_panel = Panel(timing_text, title="Time Estimates", border_style="green")
+            console.print(timing_panel)
         else:
-            print(f"⚠️  No indices configured - nothing would be processed!")
+            console.print("[bold red]⚠️  No indices configured - nothing would be processed![/bold red]")
 
-    print(f"💾 Database writes: DISABLED (dry-run mode)")
-    print(f"🚀 Use without --dry-run to execute actual processing")
+    # Status panel
+    status_text = "[red]💾 Database writes: DISABLED (dry-run mode)[/red]\n"
+    status_text += "[green]🚀 Use without --dry-run to execute actual processing[/green]"
+    
+    status_panel = Panel(status_text, title="Dry-Run Status", border_style="yellow")
+    console.print(status_panel)
 
 
 def process_temporal_files(
@@ -211,86 +249,92 @@ def process_temporal_files(
     start_time = time.time()
 
     # Bulk preload existing indices for all target files (single database query)
-    print(f"🔍 Preloading existing indices for {len(files)} files...")
-    preload_start = time.time()
-    existing_indices_bulk = db_manager.get_indices_for_files_bulk(
-        files, "temporal", expected_indices
-    )
-    preload_time = time.time() - preload_start
-    print(
-        f"✓ Preloaded in {preload_time:.1f}s - found indices for {len(existing_indices_bulk)} files"
-    )
-
-    for i, wav_file in enumerate(files, 1):
-        file_start_time = time.time()
-        print(
-            f"[{target_name}] [{i:4d}/{len(files)}] {os.path.basename(wav_file)}...",
-            end=" ",
+    with console.status("[bold blue]🔍 Preloading existing indices..."):
+        preload_start = time.time()
+        existing_indices_bulk = db_manager.get_indices_for_files_bulk(
+            files, "temporal", expected_indices
         )
+        preload_time = time.time() - preload_start
+    
+    console.print(f"[green]✓ Preloaded in {preload_time:.1f}s - found indices for {len(existing_indices_bulk)} files[/green]")
 
-        # Try to acquire file lock - skip immediately if locked
-        lock_path = f"{wav_file}.lock"
-        try:
-            with FileLock(lock_path, timeout=0):
-                # Check if the specific indices we want to create already exist (using preloaded data)
-                existing_indices = existing_indices_bulk.get(wav_file, {})
-                indices_exist = len(existing_indices) > 0
+    # Create progress bar
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[bold blue]{task.description}"),
+        BarColumn(bar_width=40),
+        MofNCompleteColumn(),
+        TextColumn("•"),
+        TimeRemainingColumn(),
+        TextColumn("•"),
+        TextColumn("{task.fields[status]}", style="green"),
+        console=console
+    ) as progress:
+        task = progress.add_task(f"Processing {target_name}", total=len(files), status="Starting...")
+        
+        for i, wav_file in enumerate(files, 1):
+            file_start_time = time.time()
+            filename = os.path.basename(wav_file)
+            progress.update(task, description=f"Processing: {filename[:30]}", status="Working...")
 
-                if indices_exist and not force:
-                    exists += 1
-                    file_duration = time.time() - file_start_time
-                    existing_names = list(existing_indices.keys())
-                    print(f"(exists: {existing_names}) ({file_duration:.1f}s)")
-                    continue
-                elif indices_exist and force:
-                    if not dry_run:
-                        # Delete existing specific indices before reprocessing (only if not dry-run)
-                        for index_name in expected_indices:
-                            if index_name in existing_indices:
-                                # Note: delete_indices_for_file deletes ALL indices for file+type, not specific ones
-                                # This is a limitation of the current DatabaseManager API
-                                pass
+            # Try to acquire file lock - skip immediately if locked
+            lock_path = f"{wav_file}.lock"
+            try:
+                with FileLock(lock_path, timeout=0):
+                    # Check if the specific indices we want to create already exist (using preloaded data)
+                    existing_indices = existing_indices_bulk.get(wav_file, {})
+                    indices_exist = len(existing_indices) > 0
 
-                if dry_run:
-                    # Dry-run mode: just show what would be processed
-                    created += 1
-                    file_duration = time.time() - file_start_time
-                    enabled_indices = processor.get_enabled_indices()
-                    print(
-                        f"[DRY-RUN] would process {len(enabled_indices)} indices ({file_duration:.1f}s)"
-                    )
-                else:
-                    # Normal processing mode
-                    # Process file
-                    indices_data = processor.process_file(wav_file)
-                    timestamps = processor.get_chunk_timestamps()
+                    if indices_exist and not force:
+                        exists += 1
+                        file_duration = time.time() - file_start_time
+                        existing_names = list(existing_indices.keys())
+                        progress.update(task, status=f"Exists ({file_duration:.1f}s)")
+                        progress.advance(task)
+                        continue
+                    elif indices_exist and force:
+                        if not dry_run:
+                            # Delete existing specific indices before reprocessing (only if not dry-run)
+                            for index_name in expected_indices:
+                                if index_name in existing_indices:
+                                    # Note: delete_indices_for_file deletes ALL indices for file+type, not specific ones
+                                    # This is a limitation of the current DatabaseManager API
+                                    pass
 
-                    # Store in database
-                    db_manager.store_indices(
-                        wav_file, "temporal", indices_data, timestamps
-                    )
+                    if dry_run:
+                        # Dry-run mode: just show what would be processed
+                        created += 1
+                        file_duration = time.time() - file_start_time
+                        enabled_indices = processor.get_enabled_indices()
+                        progress.update(task, status=f"[DRY-RUN] {len(enabled_indices)} indices ({file_duration:.1f}s)")
+                    else:
+                        # Normal processing mode
+                        progress.update(task, status="Processing indices...")
+                        # Process file
+                        indices_data = processor.process_file(wav_file)
+                        timestamps = processor.get_chunk_timestamps()
 
-                    created += 1
-                    file_duration = time.time() - file_start_time
-                    print(f"✓ ({file_duration:.1f}s)")
-        except Timeout:
-            # File is locked by another process, skip it
-            file_duration = time.time() - file_start_time
-            print(f"(locked) ({file_duration:.3f}s)")
-            continue
+                        progress.update(task, status="Storing to database...")
+                        # Store in database
+                        db_manager.store_indices(
+                            wav_file, "temporal", indices_data, timestamps
+                        )
 
-        # Progress reporting and cleanup
-        if i % 5 == 0:
-            elapsed_total = time.time() - start_time
-            current_rate = i / elapsed_total if elapsed_total > 0 else 0
-            gc.collect()
+                        created += 1
+                        file_duration = time.time() - file_start_time
+                        progress.update(task, status=f"✓ ({file_duration:.1f}s)")
+                    
+                    progress.advance(task)
+            except Timeout:
+                # File is locked by another process, skip it
+                file_duration = time.time() - file_start_time
+                progress.update(task, status=f"Locked ({file_duration:.3f}s)")
+                progress.advance(task)
+                continue
 
-            if i % 10 == 0:
-                eta = (len(files) - i) / current_rate if current_rate > 0 else 0
-                progress_pct = i / len(files) * 100
-                print(
-                    f"  [{target_name}] Rate: {current_rate:.2f} files/sec - Progress: {i}/{len(files)} ({progress_pct:.1f}%) - ETA: {eta/60:.1f}min"
-                )
+            # Cleanup every few files
+            if i % 5 == 0:
+                gc.collect()
 
     return created, exists, errors
 
@@ -448,8 +492,8 @@ def main():
     else:
         input_directory = config.get("input_directory")
         if not input_directory:
-            print(
-                "❌ No input directory specified. Use --input or set input_directory in config file."
+            console.print(
+                "[bold red]❌ No input directory specified. Use --input or set input_directory in config file.[/bold red]"
             )
             return
         input_source = "config file"
@@ -457,22 +501,29 @@ def main():
     # Set target indices - default to all targets if not specified
     target_indices = args.target if args.target else list(range(10))
 
-    dry_run_text = " (DRY-RUN MODE)" if args.dry_run else ""
-    print(f"🎵 Acoustic Indices Processing Starting...{dry_run_text}")
-    print(f"Input directory: {input_directory} (from {input_source})")
-    print(f"Configuration: {args.config}")
-    print(f"Processing type: {processing_type.upper()}")
-    print(f"Target groups: {target_indices}")
+    # Create title panel
+    dry_run_text = " [red](DRY-RUN MODE)[/red]" if args.dry_run else ""
+    title_text = f"🎵 [bold blue]Acoustic Indices Processing Starting...[/bold blue]{dry_run_text}"
+    
+    setup_table = Table(show_header=False, box=box.MINIMAL)
+    setup_table.add_row("Input directory:", f"{input_directory} [dim](from {input_source})[/dim]")
+    setup_table.add_row("Configuration:", args.config)
+    setup_table.add_row("Processing type:", processing_type.upper())
+    setup_table.add_row("Target groups:", str(target_indices))
+    
     if args.dry_run:
-        print(f"🔍 Dry-run mode: No actual processing or database writes will occur")
+        setup_table.add_row("Mode:", "[red]🔍 Dry-run mode: No actual processing or database writes will occur[/red]")
+    
+    console.print(Panel(setup_table, title=title_text, border_style="blue"))
+    
     device = setup_device()
 
     # Find and filter files
-    print(f"\n📁 Finding {processing_type} files...")
+    console.rule(f"[bold green]File Discovery", style="green")
     all_files = find_files_by_type(input_directory, processing_type)
 
     if not all_files:
-        print(f"No {processing_type} files found!")
+        console.print(f"[bold red]No {processing_type} files found![/bold red]")
         return
 
     # Apply target filtering
@@ -481,10 +532,10 @@ def main():
     target_str = "_".join(map(str, target_indices))
     target_name = f"{processing_type.upper()}_GROUP_{target_str}"
 
-    print(f"\n🎯 Processing {target_name}: {len(target_files)}/{len(all_files)} files")
+    console.print(f"[bold green]🎯 Processing {target_name}: {len(target_files)}/{len(all_files)} files[/bold green]")
 
     if not target_files:
-        print("No files to process!")
+        console.print("[bold red]No files to process![/bold red]")
         return
 
     # Show dry-run report if in dry-run mode
@@ -501,13 +552,31 @@ def main():
             target_files, config, device, target_name, args.force, args.dry_run
         )
 
-    dry_run_suffix = " (DRY-RUN)" if args.dry_run else ""
-    print(f"\n🎉 [{target_name}] Complete{dry_run_suffix}!")
+    # Create results table
+    console.print()
+    console.rule("[bold green]Processing Complete", style="green")
+    
+    results_table = Table(title=f"🎉 {target_name} Results", box=box.ROUNDED)
+    results_table.add_column("Metric", style="cyan", no_wrap=True)
+    results_table.add_column("Count", style="magenta", justify="right")
+    
     if args.dry_run:
-        print(f"  Results: Would create: {created}, Exists: {exists}, Errors: {errors}")
-        print(f"  💡 Run without --dry-run to execute actual processing")
+        results_table.add_row("Would Create", str(created))
+        results_table.add_row("Already Exists", str(exists))  
+        results_table.add_row("Errors", str(errors))
+        
+        console.print(results_table)
+        
+        # Add dry-run reminder panel
+        reminder_text = "[green]💡 Run without --dry-run to execute actual processing[/green]"
+        reminder_panel = Panel(reminder_text, title="Next Steps", border_style="green")
+        console.print(reminder_panel)
     else:
-        print(f"  Results: Created: {created}, Exists: {exists}, Errors: {errors}")
+        results_table.add_row("Created", str(created))
+        results_table.add_row("Already Existed", str(exists))
+        results_table.add_row("Errors", str(errors))
+        
+        console.print(results_table)
 
 
 if __name__ == "__main__":

@@ -129,6 +129,16 @@ class FileService:
             return file.to_dict() if file else None
     
     @staticmethod
+    def get_file_by_id(file_id: int) -> Optional[Dict[str, Any]]:
+        """Get file information by file_id"""
+        with get_db_session() as session:
+            file = session.query(AudioFile).filter(
+                AudioFile.id == file_id
+            ).first()
+            
+            return file.to_dict() if file else None
+    
+    @staticmethod
     def search_files(
         date_from: Optional[str] = None,
         date_to: Optional[str] = None,
@@ -215,3 +225,48 @@ class FileService:
             else:
                 print(f"Navigation: No {direction} file found")
                 return None
+    
+    @staticmethod
+    def get_pois_for_file(date_str: str, time_str: str) -> List[Dict[str, Any]]:
+        """Get POI spans for a specific file"""
+        from database import execute_raw_query
+        
+        # Add seconds if not provided
+        if len(time_str.split(':')) == 2:
+            time_str = f"{time_str}:00"
+        
+        query = """
+            SELECT 
+                p.id, p.label, p.notes, p.confidence, p.anchor_index_name, p.created_at,
+                ps.id as span_id, ps.start_time_sec, ps.end_time_sec, ps.chunk_start, ps.chunk_end,
+                ps.config_name, ps.processing_type
+            FROM points_of_interest p
+            JOIN poi_spans ps ON p.id = ps.poi_id
+            JOIN audio_files af ON ps.file_id = af.id
+            WHERE DATE(af.recording_datetime) = ? 
+            AND TIME(af.recording_datetime) = ?
+            ORDER BY ps.start_time_sec, p.id
+        """
+        
+        results = execute_raw_query(query, (date_str, time_str))
+        
+        pois = []
+        for row in results:
+            poi = {
+                'id': row[0],  # p.id
+                'label': row[1],  # p.label
+                'notes': row[2] if row[2] else '',  # p.notes
+                'confidence': row[3] if row[3] else 0.0,  # p.confidence
+                'anchor_index_name': row[4] if row[4] else '',  # p.anchor_index_name
+                'created_at': row[5],  # p.created_at
+                'span_id': row[6],  # ps.id
+                'start_time_sec': row[7],  # ps.start_time_sec
+                'end_time_sec': row[8],  # ps.end_time_sec
+                'chunk_start': row[9],  # ps.chunk_start
+                'chunk_end': row[10],  # ps.chunk_end
+                'config_name': row[11] if row[11] else '',  # ps.config_name
+                'processing_type': row[12] if row[12] else ''  # ps.processing_type
+            }
+            pois.append(poi)
+        
+        return pois

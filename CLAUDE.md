@@ -1,1 +1,2 @@
 - NOTE : the database stores datetimes as 2025-06-20T00:00:00 (with T separator)
+- use the venv for all python3 operations, as it has dependencies

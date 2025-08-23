@@ -21,6 +21,7 @@ from api.files import files_bp
 from api.spectrograms import spectrograms_bp
 from api.audio import audio_bp
 from api.indices import indices_bp
+from api.poi import poi_bp
 
 
 def create_app(config_path: str) -> Flask:
@@ -55,6 +56,7 @@ def create_app(config_path: str) -> Flask:
     app.register_blueprint(spectrograms_bp)
     app.register_blueprint(audio_bp)
     app.register_blueprint(indices_bp)
+    app.register_blueprint(poi_bp)
     
     # Main route
     @app.route('/')
