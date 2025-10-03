@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Points of Interest - AudioMoth Viewer</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+</head>
+<body>
+    <nav class="top-nav">
+        <div class="nav-container">
+            <a href="/" class="nav-brand">AudioMoth Viewer</a>
+            <div class="nav-links">
+                <a href="/" class="nav-link">Spectrogram</a>
+                <a href="/poi" class="nav-link active">Points of Interest</a>
+            </div>
+        </div>
+    </nav>
+    
+    <div class="poi-app">
+        <header class="poi-header">
+            <h1>Points of Interest</h1>
+            <p>Browse research goals and their associated points of interest</p>
+        </header>
+        
+        <main class="poi-content">
+            <div class="goals-container">
+                {% for goal in goals %}
+                <div class="goal-section">
+                    <div class="goal-header">
+                        <h2>{{ goal.title }}</h2>
+                        <span class="goal-date">Created: {{ goal.created_at.strftime('%Y-%m-%d') if goal.created_at else 'Unknown' }}</span>
+                    </div>
+                    {% if goal.description %}
+                    <p class="goal-description">{{ goal.description }}</p>
+                    {% endif %}
+                    
+                    <div class="poi-list">
+                        {% if goal.pois %}
+                            {% for poi in goal.pois %}
+                            <div class="poi-item">
+                                <div class="poi-header">
+                                    <h4>{{ poi.label }}</h4>
+                                    <span class="poi-confidence">Confidence: {{ "%.1f"|format(poi.confidence * 100) }}%</span>
+                                </div>
+                                {% if poi.notes %}
+                                <p class="poi-notes">{{ poi.notes }}</p>
+                                {% endif %}
+                                {% if poi.anchor_index_name %}
+                                <p class="poi-anchor">Index: {{ poi.anchor_index_name }}</p>
+                                {% endif %}
+                                
+                                <div class="poi-spans">
+                                    {% for span in poi.spans %}
+                                    <div class="poi-span">
+                                        <a href="/?file_id={{ span.file_id }}&time={{ span.start_time_sec }}" class="poi-link">
+                                            <strong>{{ span.file_name }}</strong><br>
+                                            {{ span.start_time_formatted }} - {{ span.end_time_formatted }}
+                                        </a>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                            {% endfor %}
+                        {% else %}
+                            <p class="no-pois">No points of interest for this goal yet.</p>
+                        {% endif %}
+                    </div>
+                </div>
+                {% else %}
+                <div class="no-goals">
+                    <p>No research goals found. Add some goals and POIs to get started.</p>
+                </div>
+                {% endfor %}
+            </div>
+        </main>
+    </div>
+</body>
+</html>
