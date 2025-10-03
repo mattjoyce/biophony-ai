@@ -94,7 +94,9 @@ class TemporalIndicesProcessor(AcousticIndex):
         duration_sec = len(audio) / sample_rate
         tolerance_sec = 2.0
         if abs(duration_sec - self.file_duration_sec) > tolerance_sec:
-            raise ValueError(f"File duration {duration_sec}s outside tolerance ±{tolerance_sec}s of expected {self.file_duration_sec}s")
+            print(f"  ⚠️  Skipping file: duration {duration_sec}s outside tolerance ±{tolerance_sec}s of expected {self.file_duration_sec}s")
+            # Return special marker to indicate file should be marked as skipped
+            return {'_skipped': True, 'reason': f'duration_{duration_sec}s', 'filepath': str(wav_path)}
         
         # Adjust chunk count for shorter files within tolerance
         max_chunks = len(audio) // self.samples_per_chunk

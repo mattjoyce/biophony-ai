@@ -93,11 +93,20 @@ def main():
         print(f"Finding NPZ files in: {input_dir}")
         all_npz_files = find_all_spectrogram_files(input_dir)
         
-        # Select files based on target indices
+        # We need to find ALL files in scope first (including WAV files), then filter NPZ files by target
+        # This matches the logic of other scripts where target is based on position in complete file list
+        from spectrogram_utils import find_all_wav_files
+        all_wav_files = find_all_wav_files(input_dir)  # All files in scope
+        
+        # Select NPZ files based on target indices using WAV file positions
         npz_files = []
-        for i, f in enumerate(all_npz_files):
-            if i % 10 in args.target:
-                npz_files.append(f)
+        for wav_file in all_wav_files:
+            file_index = all_wav_files.index(wav_file)
+            if file_index % 10 in args.target:
+                # Check if corresponding NPZ file exists
+                npz_file = wav_file.replace('.WAV', '_spec.npz')
+                if npz_file in all_npz_files:
+                    npz_files.append(npz_file)
         
         target_str = "_".join(map(str, args.target))
         target_name = f"GROUP_{target_str}"

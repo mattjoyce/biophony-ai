@@ -1,5 +1,5 @@
-input_directory : "/mnt/n/AudioWalks/H3-VC/2025-6-20_to_7-31/"
-database_path : "/mnt/n/AudioWalks/H3-VC/2025-6-20_to_7-31/audiomoth.db"
+input_directory : "/mnt/n/AudioMoth/2025-Set-MacquarieUni/"
+database_path : "/mnt/n/AudioMoth/2025-Set-MacquarieUni/audiomoth.db"
 
 # Audio parameters
 sample_rate: 48000
@@ -28,31 +28,31 @@ acoustic_indices:
     temporal_entropy:
       processor: temporal_entropy
       params: {}
-      
+
     temporal_activity:
       processor: temporal_activity
       params: {}
-        
+
     temporal_median:
       processor: temporal_median
       params: {}
-      
+
   spectral:
     chunk_duration_sec: 4.5
     # Standard spectral indices (names match existing database)
-    
+
     # Standard complexity analysis
     acoustic_complexity_index:
       processor: acoustic_complexity_index
       params: {}
-    
+
     # Standard bioacoustic index (matches existing database: standard_bai_500-2000)
     standard_bai_500-2000:
       processor: bioacoustics_index
       params:
         freq_min: 500
         freq_max: 2000
-    
+
     # Standard soundscape analysis (matches existing database: standard_soundscape_500-2000)
     standard_soundscape_500-2000:
       processor: soundscape_index
@@ -61,12 +61,12 @@ acoustic_indices:
         bioacoustic_freq_max: 2000
         anthropogenic_freq_min: 0
         anthropogenic_freq_max: 500
-    
+
     # Standard entropy analyses
     spectral_entropy:
       processor: spectral_entropy
       params: {}
-      
+
     frequency_entropy:
       processor: frequency_entropy
       params: {}

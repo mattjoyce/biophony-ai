@@ -73,7 +73,7 @@ def get_available_indices():
         
         cursor.execute("""
             SELECT DISTINCT index_name 
-            FROM acoustic_indices 
+            FROM v_acoustic_indices 
             ORDER BY index_name
         """)
         
@@ -103,7 +103,7 @@ def get_file_indices(date: str, time: str):
         
         cursor.execute("""
             SELECT index_name, chunk_index, start_time_sec, value
-            FROM acoustic_indices
+            FROM v_acoustic_indices
             WHERE file_id = ?
             ORDER BY index_name, chunk_index
         """, (file_info['id'],))
@@ -162,7 +162,7 @@ def get_rgb_indices(date: str, time: str):
         
         cursor.execute(f"""
             SELECT index_name, chunk_index, start_time_sec, value
-            FROM acoustic_indices
+            FROM v_acoustic_indices
             WHERE file_id = ? AND index_name IN ({placeholders})
             ORDER BY chunk_index, index_name
         """, [file_info['id']] + requested_indices)

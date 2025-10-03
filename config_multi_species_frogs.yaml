@@ -1,5 +1,5 @@
 input_directory : "/mnt/n/AudioWalks/H3-VC/2025-6-20_to_7-31/"
-database_path : "audiomoth.db"
+database_path : "/mnt/n/AudioWalks/H3-VC/2025-6-20_to_7-31/audiomoth.db"
 
 # Audio parameters
 sample_rate: 48000

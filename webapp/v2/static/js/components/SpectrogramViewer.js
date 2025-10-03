@@ -267,17 +267,23 @@ export class SpectrogramViewer {
     
     calculateCoordinates(x, y) {
         const state = this.stateManager.getState();
-        
+
         // Get current file duration (default to 15 minutes for AudioMoth)
         const currentFile = state.currentFile;
         const duration = currentFile ? currentFile.duration_seconds : 900;
-        
+
+        // Calculate time offset using rendered canvas dimensions (accounts for CSS scaling)
+        const rect = this.canvas.getBoundingClientRect();
+        const normalizedX = x / rect.width;  // Percentage across canvas
+        const normalizedY = y / rect.height; // Percentage down canvas
+
         // Calculate time offset within the recording
-        const timeOffset = (x / this.canvas.width) * duration;
-        
-        // Calculate frequency using mel scale or linear scale
-        const frequency = this.pixelToFrequency(this.canvas.height - y);
-        
+        const timeOffset = normalizedX * duration;
+
+        // Calculate frequency using canvas intrinsic height for pixel mapping
+        const intrinsicY = normalizedY * this.canvas.height;
+        const frequency = this.pixelToFrequency(this.canvas.height - intrinsicY);
+
         return {
             pixelX: Math.round(x),
             pixelY: Math.round(y),

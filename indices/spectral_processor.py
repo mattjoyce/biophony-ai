@@ -213,14 +213,30 @@ class SpectralIndicesProcessor(AcousticIndex):
             chunk_cpu = chunk_tensor.cpu().numpy()
             
             # Compute the specific spectral index with parameters
-            value = self._compute_single_named_index(chunk_cpu, processor_name, params)
-            if not isinstance(value, (int, float, np.number)):
-                # Handle tuple returns by taking the first element
-                if isinstance(value, tuple):
-                    value = value[0]
+            try:
+                value = self._compute_single_named_index(chunk_cpu, processor_name, params)
+                
+                # Convert to scalar value
+                if isinstance(value, (int, float, np.number)):
+                    scalar_value = float(value)
+                elif isinstance(value, tuple):
+                    scalar_value = float(value[0])
+                elif isinstance(value, np.ndarray):
+                    if value.size == 1:
+                        scalar_value = float(value.item())
+                    else:
+                        scalar_value = float(np.mean(value))
+                elif hasattr(value, '__len__') and len(value) > 0:
+                    # Handle other sequence types
+                    scalar_value = float(value[0])
                 else:
-                    value = 0.0
-            values.append(float(value))
+                    scalar_value = 0.0
+                    
+                values.append(scalar_value)
+                
+            except Exception as e:
+                print(f"Error processing {processor_name} chunk {i}: {e}")
+                values.append(0.0)
         
         return np.array(values)
     
@@ -427,20 +443,32 @@ class SpectralIndicesProcessor(AcousticIndex):
                 return float(result[1]) if not np.isnan(result[1]) else 0.0
             return result[0] if isinstance(result, tuple) else result
         
-        elif processor_name == 'number_of_peaks':
-            peaks = features.number_of_peaks(chunk)
-            return float(peaks) if peaks is not None else 0.0
         
         elif processor_name == 'spectral_activity':
-            return features.spectral_activity(chunk)
+            result = features.spectral_activity(chunk)
+            # Returns tuple: (ACTspfract_per_bin, ACTspcount_per_bin, ACTsp_per_bin) 
+            # Use mean of first element (proportion of activity per frequency bin)
+            if isinstance(result, tuple) and len(result) > 0:
+                proportion_per_bin = result[0]
+                return float(np.mean(proportion_per_bin)) if isinstance(proportion_per_bin, list) else float(proportion_per_bin)
+            return float(result)
         
         elif processor_name == 'spectral_events':
-            events = features.spectral_events(chunk)
+            dt = self.chunk_duration_sec / chunk.shape[1]  # Time step between spectrogram columns
+            events = features.spectral_events(chunk, dt)
             # Return count of events as the index value
-            return float(len(events)) if events is not None else 0.0
+            if events is not None:
+                if isinstance(events, (list, tuple)):
+                    return float(len(events))
+                elif hasattr(events, '__len__'):
+                    return float(len(events))
+                else:
+                    return float(events)
+            return 0.0
         
         elif processor_name == 'spectral_cover':
-            return features.spectral_cover(chunk)
+            fn = np.linspace(0, self.sample_rate/2, chunk.shape[0])
+            return features.spectral_cover(chunk, fn)
         
         elif processor_name == 'soundscape_index':
             # Get frequency parameters from params dict
@@ -459,13 +487,20 @@ class SpectralIndicesProcessor(AcousticIndex):
             return result[0] if isinstance(result, tuple) else result
         
         elif processor_name == 'acoustic_gradient_index':
-            return features.acoustic_gradient_index(chunk)
+            dt = self.chunk_duration_sec / chunk.shape[1]  # Time step between spectrogram columns
+            result = features.acoustic_gradient_index(chunk, dt)
+            # Return first element of tuple (the main index value)
+            if isinstance(result, tuple):
+                return float(result[0])
+            return float(result)
         
         elif processor_name == 'spectral_leq':
-            # Create dummy time and frequency vectors for spectral_leq
-            tn = np.linspace(0, self.chunk_duration_sec, chunk.shape[1])
-            fn_local = np.linspace(0, self.sample_rate/2, chunk.shape[0])
-            return features.spectral_leq(chunk, tn, fn_local)
+            # spectral_leq computes equivalent sound pressure level from spectrogram
+            # Use default calibration parameters for AudioMoth
+            gain = 1.0  # Default gain
+            # Convert power spectrogram to SPL using default AudioMoth calibration
+            leq = features.spectral_leq(chunk, gain=gain)
+            return float(leq)
         
         elif processor_name == 'maad_spectral_activity':
             # MAAD spectral activity index (AAI spectral component)
@@ -480,12 +515,23 @@ class SpectralIndicesProcessor(AcousticIndex):
                 if np.any(freq_mask):
                     # Extract frequency band and compute spectral activity
                     band_chunk = chunk[freq_mask, :]
-                    return float(features.spectral_activity(band_chunk))
+                    ACTspfract_per_bin, ACTspcount_per_bin, ACTspmean_per_bin = features.spectral_activity(band_chunk)
+                    # Return mean proportion of activity across frequency bins
+                    return float(np.mean(ACTspfract_per_bin))
                 else:
                     return 0.0
             else:
                 # No frequency filtering, use full spectrum
-                return float(features.spectral_activity(chunk))
+                ACTspfract_per_bin, ACTspcount_per_bin, ACTspmean_per_bin = features.spectral_activity(chunk)
+                # Return mean proportion of activity across frequency bins
+                return float(np.mean(ACTspfract_per_bin))
+        
+        elif processor_name == 'number_of_peaks':
+            fn = np.linspace(0, self.sample_rate/2, chunk.shape[0])
+            # Take mean across time dimension to get frequency spectrum
+            spectrum = np.mean(chunk, axis=1)
+            peaks = features.number_of_peaks(spectrum, fn)
+            return float(peaks)
         
         else:
             raise ValueError(f"Unsupported processor: {processor_name}")

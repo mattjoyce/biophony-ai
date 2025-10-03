@@ -20,11 +20,16 @@ n_mels : 128
 global_min : -40
 global_max : 40
 
-# Acoustic indices configuration - STANDARD INDICES ONLY
+# Acoustic indices configuration - MAAD AAI INDICES
 acoustic_indices:
   temporal:
     chunk_duration_sec: 4.5
-    # Standard temporal indices (names match existing database)
+    # MAAD temporal activity index (AAI temporal)
+    maad_temporal_activity:
+      processor: maad_temporal_activity
+      params: {}
+    
+    # Keep existing temporal indices for comparison
     temporal_entropy:
       processor: temporal_entropy
       params: {}
@@ -39,28 +44,30 @@ acoustic_indices:
       
   spectral:
     chunk_duration_sec: 4.5
-    # Standard spectral indices (names match existing database)
     
-    # Standard complexity analysis
+    # MAAD spectral activity index (AAI spectral)
+    maad_spectral_activity:
+      processor: maad_spectral_activity
+      params: {}
+    
+    # MAAD spectral activity for Eastern Froglet frequency range
+    maad_spectral_activity_eastern_froglet_2500-3500:
+      processor: maad_spectral_activity
+      params:
+        freq_min: 2500
+        freq_max: 3500
+    
+    # Keep existing Eastern Froglet BAI for comparison
+    eastern_froglet_bai_2500-3500:
+      processor: bioacoustics_index
+      params:
+        freq_min: 2500
+        freq_max: 3500
+    
+    # Standard complexity analysis for baseline comparison
     acoustic_complexity_index:
       processor: acoustic_complexity_index
       params: {}
-    
-    # Standard bioacoustic index (matches existing database: standard_bai_500-2000)
-    standard_bai_500-2000:
-      processor: bioacoustics_index
-      params:
-        freq_min: 500
-        freq_max: 2000
-    
-    # Standard soundscape analysis (matches existing database: standard_soundscape_500-2000)
-    standard_soundscape_500-2000:
-      processor: soundscape_index
-      params:
-        bioacoustic_freq_min: 500
-        bioacoustic_freq_max: 2000
-        anthropogenic_freq_min: 0
-        anthropogenic_freq_max: 500
     
     # Standard entropy analyses
     spectral_entropy:

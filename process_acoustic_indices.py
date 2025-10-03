@@ -80,7 +80,7 @@ def load_config(config_path: str) -> dict:
     # Store configuration in database for future reference
     try:
         config_name = os.path.basename(config_path)
-        db_manager = DatabaseManager(config.get("database_path", "audiomoth.db"))
+        db_manager = DatabaseManager(config.get("database_path", "audiomoth.db"), config=config)
         db_manager.store_index_configuration(config_name, config)
         console.print(f"[green]✓[/green] Configuration loaded and stored: {config_name}")
     except Exception as e:
@@ -237,7 +237,7 @@ def process_temporal_files(
         raise FileNotFoundError(f"❌ Database file not found: {db_path}")
 
     processor = TemporalIndicesProcessor(config)
-    db_manager = DatabaseManager(db_path)
+    db_manager = DatabaseManager(db_path, config=config)
 
     # Get the specific indices that would be created by this processor
     # Temporal indices typically use their cosmetic name as database name
@@ -312,17 +312,40 @@ def process_temporal_files(
                         progress.update(task, status="Processing indices...")
                         # Process file
                         indices_data = processor.process_file(wav_file)
-                        timestamps = processor.get_chunk_timestamps()
 
-                        progress.update(task, status="Storing to database...")
-                        # Store in database
-                        db_manager.store_indices(
-                            wav_file, "temporal", indices_data, timestamps
-                        )
+                        # Check if file was skipped (dict with _skipped flag returned)
+                        if isinstance(indices_data, dict) and indices_data.get('_skipped'):
+                            errors += 1
+                            file_duration = time.time() - file_start_time
+                            progress.update(task, status=f"⚠️  Skipped ({file_duration:.1f}s)")
 
-                        created += 1
-                        file_duration = time.time() - file_start_time
-                        progress.update(task, status=f"✓ ({file_duration:.1f}s)")
+                            # Mark file as skipped in database
+                            try:
+                                import sqlite3
+                                db_path = config.get("database_path")
+                                if db_path:
+                                    conn = sqlite3.connect(db_path)
+                                    cursor = conn.cursor()
+                                    cursor.execute(
+                                        "UPDATE audio_files SET processing_status = 'skipped' WHERE filepath = ?",
+                                        (wav_file,)
+                                    )
+                                    conn.commit()
+                                    conn.close()
+                            except Exception as e:
+                                pass  # Don't fail processing if DB update fails
+                        else:
+                            timestamps = processor.get_chunk_timestamps()
+
+                            progress.update(task, status="Storing to database...")
+                            # Store in database
+                            db_manager.store_indices(
+                                wav_file, "temporal", indices_data, timestamps
+                            )
+
+                            created += 1
+                            file_duration = time.time() - file_start_time
+                            progress.update(task, status=f"✓ ({file_duration:.1f}s)")
                     
                     progress.advance(task)
             except Timeout:
@@ -358,7 +381,7 @@ def process_spectral_files(
         raise FileNotFoundError(f"❌ Database file not found: {db_path}")
 
     processor = SpectralIndicesProcessor(config, device)
-    db_manager = DatabaseManager(db_path)
+    db_manager = DatabaseManager(db_path, config=config)
 
     # Get the specific indices that would be created by this processor
     if hasattr(processor, "named_indices") and processor.named_indices:
@@ -439,16 +462,41 @@ def process_spectral_files(
                     # Normal processing mode
                     # Process file
                     indices_data = processor.process_file(npz_file)
-                    timestamps = processor.get_chunk_timestamps()
 
-                    # Store in database
-                    db_manager.store_indices(
-                        npz_file, "spectral", indices_data, timestamps
-                    )
+                    # Check if file was skipped (dict with _skipped flag returned)
+                    if isinstance(indices_data, dict) and indices_data.get('_skipped'):
+                        errors += 1
+                        file_duration = time.time() - file_start_time
+                        print(f"⚠️  Skipped ({file_duration:.1f}s)")
 
-                    created += 1
-                    file_duration = time.time() - file_start_time
-                    print(f"✓ ({file_duration:.1f}s)")
+                        # Mark file as skipped in database
+                        try:
+                            import sqlite3
+                            db_path = config.get("database_path")
+                            if db_path:
+                                conn = sqlite3.connect(db_path)
+                                cursor = conn.cursor()
+                                # Get wav filepath from npz filepath
+                                wav_file = npz_file.replace('_spec.npz', '.WAV')
+                                cursor.execute(
+                                    "UPDATE audio_files SET processing_status = 'skipped' WHERE filepath = ?",
+                                    (wav_file,)
+                                )
+                                conn.commit()
+                                conn.close()
+                        except Exception as e:
+                            pass  # Don't fail processing if DB update fails
+                    else:
+                        timestamps = processor.get_chunk_timestamps()
+
+                        # Store in database
+                        db_manager.store_indices(
+                            npz_file, "spectral", indices_data, timestamps
+                        )
+
+                        created += 1
+                        file_duration = time.time() - file_start_time
+                        print(f"✓ ({file_duration:.1f}s)")
         except Timeout:
             # File is locked by another process, skip it
             file_duration = time.time() - file_start_time

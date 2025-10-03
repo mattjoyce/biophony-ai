@@ -23,6 +23,7 @@ class AudioFile(Base):
     duration_seconds = Column(Float, nullable=False)
     audiomoth_id = Column(String)
     weather_id = Column(Integer, ForeignKey('weather_data.id'), nullable=True)
+    processing_status = Column(String, nullable=True)
     
     # Relationship to weather data (forward reference)
     # weather = relationship("WeatherData", back_populates="audio_files")
@@ -38,7 +39,8 @@ class AudioFile(Base):
             'time': self.recording_datetime.time().strftime('%H:%M') if self.recording_datetime else None,
             'duration_seconds': self.duration_seconds,
             'audiomoth_id': self.audiomoth_id,
-            'weather_id': self.weather_id
+            'weather_id': self.weather_id,
+            'processing_status': self.processing_status
         }
 
 

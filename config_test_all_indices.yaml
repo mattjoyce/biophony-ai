@@ -1,0 +1,163 @@
+input_directory : "/mnt/n/AudioWalks/H3-VC/test/"
+database_path : "/mnt/n/AudioWalks/H3-VC/test/audiomoth.db"
+
+# Audio parameters
+sample_rate: 48000
+file_duration_sec: 900
+
+# Display parameters
+width-px : 1000
+height-px : 300
+border-px : 0
+dpi : 100
+
+# Spectrogram parameters
+n_fft : 2048
+hop_length : 256
+n_mels : 128
+
+# Global contrast normalization range
+global_min : -40
+global_max : 40
+
+# Acoustic indices configuration - ALL AVAILABLE INDICES
+acoustic_indices:
+  temporal:
+    chunk_duration_sec: 4.5
+    
+    # All temporal processors
+    temporal_entropy:
+      processor: temporal_entropy
+      params: {}
+      
+    temporal_activity:
+      processor: temporal_activity
+      params: {}
+      
+    temporal_activity_level:
+      processor: temporal_activity
+      params:
+        return_value: activity
+        
+    temporal_event_count:
+      processor: temporal_activity
+      params:
+        return_value: count
+        
+    temporal_mean_db:
+      processor: temporal_activity
+      params:
+        return_value: mean_db
+        
+    temporal_median:
+      processor: temporal_median
+      params: {}
+      
+    maad_temporal_activity:
+      processor: maad_temporal_activity
+      params: {}
+      
+  spectral:
+    chunk_duration_sec: 4.5
+    
+    # All spectral processors
+    acoustic_complexity_index:
+      processor: acoustic_complexity_index
+      params: {}
+      
+    acoustic_diversity_index:
+      processor: acoustic_diversity_index
+      params: {}
+      
+    acoustic_eveness_index:
+      processor: acoustic_eveness_index
+      params: {}
+      
+    acoustic_gradient_index:
+      processor: acoustic_gradient_index
+      params: {}
+      
+    # Bioacoustic indices with different frequency ranges
+    bioacoustics_index_standard_500-2000:
+      processor: bioacoustics_index
+      params:
+        freq_min: 500
+        freq_max: 2000
+        
+    bioacoustics_index_eastern_froglet_2500-3500:
+      processor: bioacoustics_index
+      params:
+        freq_min: 2500
+        freq_max: 3500
+        
+    bioacoustics_index_bird_chorus_4000-8000:
+      processor: bioacoustics_index
+      params:
+        freq_min: 4000
+        freq_max: 8000
+    
+    # Soundscape indices with different frequency bands
+    soundscape_index_standard_500-2000:
+      processor: soundscape_index
+      params:
+        bioacoustic_freq_min: 500
+        bioacoustic_freq_max: 2000
+        anthropogenic_freq_min: 0
+        anthropogenic_freq_max: 500
+        
+    soundscape_index_frogs_500-3500:
+      processor: soundscape_index
+      params:
+        bioacoustic_freq_min: 500
+        bioacoustic_freq_max: 3500
+        anthropogenic_freq_min: 0
+        anthropogenic_freq_max: 500
+        
+    soundscape_index_birds_4000-8000:
+      processor: soundscape_index
+      params:
+        bioacoustic_freq_min: 4000
+        bioacoustic_freq_max: 8000
+        anthropogenic_freq_min: 0
+        anthropogenic_freq_max: 1000
+    
+    # Entropy analyses
+    spectral_entropy:
+      processor: spectral_entropy
+      params: {}
+      
+    frequency_entropy:
+      processor: frequency_entropy
+      params: {}
+      
+    # MAAD spectral activity indices
+    maad_spectral_activity:
+      processor: maad_spectral_activity
+      params: {}
+      
+    maad_spectral_activity_eastern_froglet_2500-3500:
+      processor: maad_spectral_activity
+      params:
+        freq_min: 2500
+        freq_max: 3500
+    
+    # Additional spectral indices
+    spectral_activity:
+      processor: spectral_activity
+      params: {}
+      
+    spectral_events:
+      processor: spectral_events
+      params: {}
+      
+    spectral_cover:
+      processor: spectral_cover
+      params: {}
+      
+    spectral_leq:
+      processor: spectral_leq
+      params: {}
+      
+    number_of_peaks:
+      processor: number_of_peaks
+      params: {}

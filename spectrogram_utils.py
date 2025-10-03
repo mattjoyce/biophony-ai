@@ -8,7 +8,7 @@ import numpy as np
 import os
 import glob
 from pathlib import Path
-from typing import Dict, Tuple, Optional, Any, List
+from typing import Dict, Tuple, Optional, Any, List, Union
 
 # Required fields for spectrogram NPZ files
 REQUIRED_FIELDS = {
@@ -257,3 +257,118 @@ def find_all_spectrogram_files(root_dir: str) -> List[str]:
     root_path = Path(root_dir)
     npz_files = list(root_path.rglob("*.npz"))
     return sorted([str(f) for f in npz_files])
+
+def get_volume_prefix(config: Dict[str, Any]) -> str:
+    """
+    Extract volume prefix from config input_directory
+    
+    Args:
+        config: Configuration dictionary containing input_directory
+        
+    Returns:
+        Volume prefix string (e.g., "/Volumes/Extreme SSD", "/mnt/n/AudioWalks/H3-VC")
+        
+    Raises:
+        ValueError: If input_directory not found in config
+    """
+    if 'input_directory' not in config:
+        raise ValueError("input_directory not found in config")
+    
+    input_dir = config['input_directory'].rstrip('/')
+    
+    # Known volume prefixes for cross-platform support
+    known_volumes = [
+        "/Volumes/Extreme SSD",     # macOS
+        "/mnt/n/AudioWalks/H3-VC",  # WSL
+    ]
+    
+    for volume in known_volumes:
+        if input_dir.startswith(volume):
+            return volume
+    
+    # Fallback: use the input_directory as-is if no known volume matches
+    return input_dir
+
+def convert_to_relative_path(full_path: str, volume_prefix: str) -> str:
+    """
+    Convert absolute path to relative path by removing volume prefix
+    
+    Args:
+        full_path: Full absolute path
+        volume_prefix: Volume prefix to remove
+        
+    Returns:
+        Relative path without volume prefix
+    """
+    full_path = full_path.rstrip('/')
+    volume_prefix = volume_prefix.rstrip('/')
+    
+    if full_path.startswith(volume_prefix):
+        relative_path = full_path[len(volume_prefix):].lstrip('/')
+        return relative_path
+    
+    # If path doesn't start with volume prefix, return as-is
+    return full_path
+
+def resolve_cross_platform_path(config: Dict[str, Any], relative_path: str) -> str:
+    """
+    Resolve relative path to absolute path using config volume prefix
+    
+    Args:
+        config: Configuration dictionary containing input_directory
+        relative_path: Relative path to resolve
+        
+    Returns:
+        Absolute path with volume prefix from config
+    """
+    volume_prefix = get_volume_prefix(config)
+    relative_path = relative_path.lstrip('/')
+    return os.path.join(volume_prefix, relative_path)
+
+def get_spectrogram_path_cross_platform(config: Dict[str, Any], wav_path: str) -> str:
+    """
+    Get the corresponding spectrogram NPZ path for a WAV file (cross-platform)
+    
+    Args:
+        config: Configuration dictionary for volume resolution
+        wav_path: Path to WAV file (absolute or relative)
+        
+    Returns:
+        Path to corresponding NPZ file with same volume context
+    """
+    # If wav_path is relative, resolve it first
+    if not os.path.isabs(wav_path):
+        wav_path = resolve_cross_platform_path(config, wav_path)
+    
+    # Convert to NPZ path
+    base_path = wav_path.replace('.WAV', '').replace('.wav', '')
+    return f"{base_path}_spec.npz"
+
+def split_path_for_database(config: Dict[str, Any], full_path: str) -> Tuple[str, str]:
+    """
+    Split a full path into volume_prefix and relative_path for database storage
+    
+    Args:
+        config: Configuration dictionary containing input_directory
+        full_path: Full absolute path to split
+        
+    Returns:
+        Tuple of (volume_prefix, relative_path) for database storage
+    """
+    volume_prefix = get_volume_prefix(config)
+    relative_path = convert_to_relative_path(full_path, volume_prefix)
+    return volume_prefix, relative_path
+
+def reconstruct_path_from_database(volume_prefix: str, relative_path: str) -> str:
+    """
+    Reconstruct full path from database volume_prefix and relative_path
+    
+    Args:
+        volume_prefix: Volume prefix from database
+        relative_path: Relative path from database
+        
+    Returns:
+        Full absolute path
+    """
+    relative_path = relative_path.lstrip('/')
+    return os.path.join(volume_prefix, relative_path)

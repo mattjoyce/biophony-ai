@@ -8,6 +8,7 @@ import os
 import sys
 import argparse
 import yaml
+import sqlite3
 from pathlib import Path
 from filelock import FileLock, Timeout
 from audio_database import AudioDatabase
@@ -27,6 +28,7 @@ def parse_arguments():
     
     # Processing modes
     mode_group = parser.add_mutually_exclusive_group(required=True)
+    mode_group.add_argument("--init", action="store_true", help="Initialize/create database only")
     mode_group.add_argument("--scan", action="store_true", help="Scan directory and add new files to database")
     mode_group.add_argument("--rescan", action="store_true", help="Rescan all files, updating existing records")
     mode_group.add_argument("--stats", action="store_true", help="Show database statistics only")
@@ -126,7 +128,7 @@ def show_database_stats(db):
     
     if file_count > 0:
         # Get some sample metadata to show what's available
-        conn = db.get_connection()
+        conn = sqlite3.connect(db.db_path)
         cursor = conn.cursor()
         
         # Get unique AudioMoth devices
@@ -150,6 +152,16 @@ def show_database_stats(db):
         if total_duration:
             hours = total_duration / 3600
             print(f"Total duration: {hours:.1f} hours")
+        
+        # Show cross-platform statistics
+        cursor.execute("SELECT COUNT(*) FROM audio_files WHERE volume_prefix IS NOT NULL")
+        cross_platform_count = cursor.fetchone()[0]
+        if cross_platform_count > 0:
+            print(f"Cross-platform records: {cross_platform_count} ({cross_platform_count/file_count*100:.1f}%)")
+            
+            cursor.execute("SELECT DISTINCT volume_prefix FROM audio_files WHERE volume_prefix IS NOT NULL")
+            volumes = [row[0] for row in cursor.fetchall()]
+            print(f"  Volume prefixes: {', '.join(volumes)}")
         
         conn.close()
 
@@ -181,7 +193,9 @@ def main():
         print(f"Input directory: {input_directory} (from {input_source})")
     
     # Determine processing mode
-    if args.scan:
+    if args.init:
+        mode = "init"
+    elif args.scan:
         mode = "scan"
     elif args.rescan:
         mode = "rescan"  
@@ -196,17 +210,30 @@ def main():
     # Initialize database - this will fail if database_path is wrong
     print(f"Database: {db_path}")
     
-    # Check if database file exists for non-stats operations
+    # Check if database file exists for operations that require existing database
     db_file = Path(db_path) 
-    if mode != "stats" and not db_file.exists():
+    if mode not in ["stats", "init"] and not db_file.exists():
         print(f"❌ Database file not found: {db_path}")
-        print("💡 Create database first by running this script with an existing database or use the AudioDatabase class directly")
+        print("💡 Create database first by running this script with --init")
         return
     
-    db = AudioDatabase(db_path)
+    db = AudioDatabase(db_path, config=config)
+    
+    # Show cross-platform info if config has input_directory
+    if config.get('input_directory') and mode != "stats":
+        from spectrogram_utils import get_volume_prefix
+        try:
+            volume_prefix = get_volume_prefix(config)
+            print(f"🌐 Cross-platform mode: Volume prefix = {volume_prefix}")
+        except Exception:
+            pass  # Fallback mode if volume prefix detection fails
     
     # Execute based on mode
-    if mode == "stats":
+    if mode == "init":
+        print(f"✓ Database initialized at: {db_path}")
+        show_database_stats(db)
+        
+    elif mode == "stats":
         show_database_stats(db)
         
     elif mode == "scan":

@@ -89,7 +89,7 @@ class DataProcessor:
         """Get all available index names from database."""
         conn = sqlite3.connect(self.database_path)
         cursor = conn.cursor()
-        cursor.execute("SELECT DISTINCT index_name FROM acoustic_indices ORDER BY index_name")
+        cursor.execute("SELECT DISTINCT index_name FROM v_acoustic_indices ORDER BY index_name")
         indices = [row[0] for row in cursor.fetchall()]
         conn.close()
         return indices
@@ -102,7 +102,7 @@ class DataProcessor:
             SELECT 
                 MIN(DATE(recording_datetime)) as start_date,
                 MAX(DATE(recording_datetime)) as end_date
-            FROM acoustic_indices
+            FROM v_acoustic_indices
         """)
         result = cursor.fetchone()
         conn.close()
@@ -139,7 +139,7 @@ class DataProcessor:
             MIN(value) as min_value,
             MAX(value) as max_value,
             processing_type
-        FROM acoustic_indices
+        FROM v_acoustic_indices
         WHERE {where_clause}
         GROUP BY index_name, DATE(recording_datetime), CAST(strftime('%H', recording_datetime) as INTEGER)
         ORDER BY date, hour, index_name

@@ -6,20 +6,35 @@ Show stored acoustic index configurations from database
 
 import sys
 import argparse
+import yaml
 from indices.database_manager import DatabaseManager
 import json
+from pathlib import Path
 
 
 def main():
     parser = argparse.ArgumentParser(description="Show stored acoustic index configurations")
-    parser.add_argument("--config", help="Filter by config file name")
+    parser.add_argument("--config", required=True, help="YAML configuration file")
     parser.add_argument("--index", help="Show specific index configuration")
     parser.add_argument("--list", action="store_true", help="List all configurations")
-    parser.add_argument("--db", default="audiomoth.db", help="Database path")
     
     args = parser.parse_args()
     
-    db = DatabaseManager(args.db)
+    # Load config to get database path
+    try:
+        with open(args.config, 'r') as f:
+            config = yaml.safe_load(f)
+    except FileNotFoundError:
+        print(f"❌ Config file not found: {args.config}")
+        return
+    
+    db_path = config.get('database_path')
+    if not db_path:
+        print("❌ No database_path specified in config file")
+        return
+    
+    # Initialize DatabaseManager with config
+    db = DatabaseManager(db_path, config=config)
     
     if args.index:
         # Show specific index configuration

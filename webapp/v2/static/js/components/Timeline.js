@@ -193,7 +193,8 @@ export class Timeline {
             const x = (minutesSinceMidnight / 1440) * width; // 1440 = 24 * 60 minutes in a day
             
             const isSelected = this.selectedTime === file.time;
-            
+            const isSkipped = file.processing_status === 'skipped';
+
             // Store clickable area
             this.clickableAreas.push({
                 file: file,
@@ -201,12 +202,22 @@ export class Timeline {
                 y: y,
                 radius: 15  // Click tolerance
             });
-            
-            // Draw filled circle
-            this.ctx.fillStyle = isSelected ? '#dc3545' : '#007bff';
-            this.ctx.beginPath();
-            this.ctx.arc(x, y, radius, 0, 2 * Math.PI);
-            this.ctx.fill();
+
+            // Draw filled circle (or hollow for skipped)
+            if (isSkipped) {
+                // Draw hollow circle for skipped files
+                this.ctx.strokeStyle = isSelected ? '#dc3545' : '#999';
+                this.ctx.lineWidth = 2;
+                this.ctx.beginPath();
+                this.ctx.arc(x, y, radius, 0, 2 * Math.PI);
+                this.ctx.stroke();
+            } else {
+                // Draw filled circle for normal files
+                this.ctx.fillStyle = isSelected ? '#dc3545' : '#007bff';
+                this.ctx.beginPath();
+                this.ctx.arc(x, y, radius, 0, 2 * Math.PI);
+                this.ctx.fill();
+            }
             
             // Draw white border (separate path)
             this.ctx.strokeStyle = '#fff';

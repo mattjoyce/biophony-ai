@@ -16,6 +16,13 @@ import numpy as np
 from services.file_service import FileService
 from services.colormap_service import ColormapService
 
+# Import cross-platform path utilities if available
+try:
+    from spectrogram_utils import reconstruct_path_from_database
+    CROSS_PLATFORM_AVAILABLE = True
+except ImportError:
+    CROSS_PLATFORM_AVAILABLE = False
+
 
 class SpectrogramService:
     """Service for spectrogram operations"""
@@ -28,8 +35,26 @@ class SpectrogramService:
         if not file_info:
             return None
         
+        # Resolve filepath using cross-platform logic if available
         filepath = file_info['filepath']
         filename = file_info['filename']
+        
+        # Try to resolve cross-platform path if data is available
+        if CROSS_PLATFORM_AVAILABLE:
+            volume_prefix = file_info.get('volume_prefix')
+            relative_path = file_info.get('relative_path')
+            
+            if volume_prefix and relative_path:
+                try:
+                    # Simple cross-platform resolution using stored volume prefix
+                    # This works if the webapp is running on the same volume as stored
+                    # For full cross-platform support, webapp would need config access
+                    # to determine current environment's volume prefix
+                    resolved_filepath = reconstruct_path_from_database(volume_prefix, relative_path)
+                    if os.path.exists(resolved_filepath):
+                        filepath = resolved_filepath
+                except Exception:
+                    pass  # Fall back to original filepath
         
         # Look for corresponding spectrogram PNG
         audio_dir = Path(filepath).parent

@@ -5,26 +5,15 @@ database_path : "/mnt/n/AudioWalks/H3-VC/2025-6-20_to_7-31/audiomoth.db"
 sample_rate: 48000
 file_duration_sec: 900
 
-# Display parameters
-width-px : 1000
-height-px : 300
-border-px : 0
-dpi : 100
-
 # Spectrogram parameters
 n_fft : 2048
 hop_length : 256
 n_mels : 128
 
-# Global contrast normalization range
-global_min : -40
-global_max : 40
-
-# Acoustic indices configuration - ACI ONLY
+# Acoustic indices configuration - Acoustic Complexity Index only
 acoustic_indices:
   spectral:
     chunk_duration_sec: 4.5
-    # Only process ACI to fix the dB-to-linear conversion error
-    standard_aci:
+    acoustic_complexity_index:
       processor: acoustic_complexity_index
       params: {}

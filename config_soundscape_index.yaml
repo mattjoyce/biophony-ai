@@ -1,0 +1,23 @@
+input_directory : "/mnt/n/AudioWalks/H3-VC/2025-6-20_to_7-31/"
+database_path : "/mnt/n/AudioWalks/H3-VC/2025-6-20_to_7-31/audiomoth.db"
+
+# Audio parameters
+sample_rate: 48000
+file_duration_sec: 900
+
+# Spectrogram parameters
+n_fft : 2048
+hop_length : 256
+n_mels : 128
+
+# Acoustic indices configuration - Soundscape Index (NDSI) only
+acoustic_indices:
+  spectral:
+    chunk_duration_sec: 4.5
+    soundscape_index_2000-8000:
+      processor: soundscape_index
+      params:
+        bioacoustic_freq_min: 2000
+        bioacoustic_freq_max: 8000
+        anthropogenic_freq_min: 0
+        anthropogenic_freq_max: 2000

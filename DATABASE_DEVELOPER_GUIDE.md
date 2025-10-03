@@ -236,7 +236,7 @@ weather = db.get_weather_for_filename("20250706_013000.WAV")
 
 #### Time Range Queries
 ```sql
-SELECT * FROM acoustic_indices 
+SELECT * FROM v_acoustic_indices 
 WHERE wav_filepath LIKE '%/2024-06-%'
 AND index_name = 'ACI'
 ORDER BY start_time_sec

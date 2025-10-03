@@ -12,18 +12,33 @@ import hashlib
 from typing import Dict, List, Tuple, Any, Optional
 from datetime import datetime
 
+# Import cross-platform path utilities
+try:
+    from spectrogram_utils import (
+        get_volume_prefix,
+        split_path_for_database,
+        reconstruct_path_from_database,
+        resolve_cross_platform_path,
+        get_spectrogram_path_cross_platform
+    )
+    CROSS_PLATFORM_AVAILABLE = True
+except ImportError:
+    CROSS_PLATFORM_AVAILABLE = False
+
 
 class DatabaseManager:
     """Manages database operations for acoustic indices storage"""
     
-    def __init__(self, db_path: str = "audiomoth.db"):
+    def __init__(self, db_path: str = "audiomoth.db", config: Optional[Dict[str, Any]] = None):
         """
         Initialize database manager
         
         Args:
             db_path: Path to SQLite database file
+            config: Configuration dictionary for cross-platform path resolution
         """
         self.db_path = db_path
+        self.config = config
         self.setup_database()
     
     def setup_database(self) -> None:
@@ -35,57 +50,69 @@ class DatabaseManager:
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
-        # Check if table exists and needs migration
-        cursor.execute("PRAGMA table_info(acoustic_indices)")
+        # Check if acoustic_indices_core table exists
+        cursor.execute("PRAGMA table_info(acoustic_indices_core)")
         columns = [row[1] for row in cursor.fetchall()]
         
         if not columns:
-            # Table doesn't exist, create new schema
+            # Table doesn't exist, create acoustic_indices_core table
             cursor.execute('''
-            CREATE TABLE acoustic_indices (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                file_id INTEGER,
-                wav_filepath TEXT,
-                npz_filepath TEXT,
-                index_name TEXT,
-                chunk_index INTEGER,
-                start_time_sec REAL,
+            CREATE TABLE acoustic_indices_core (
+                id INTEGER PRIMARY KEY,
+                file_id INTEGER NOT NULL REFERENCES audio_files(id),
+                index_name TEXT NOT NULL,
+                chunk_index INTEGER NOT NULL,
+                start_time_sec REAL NOT NULL,
                 value REAL,
-                processing_type TEXT,
-                computed_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                processing_type TEXT NOT NULL,
+                computed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(file_id, index_name, chunk_index)
             )
             ''')
             
-            # Create indexes
+            # Create indexes for performance
             cursor.execute('''
-            CREATE INDEX idx_wav_index 
-            ON acoustic_indices (wav_filepath, index_name)
+            CREATE INDEX idx_core_file_id ON acoustic_indices_core(file_id)
             ''')
             
             cursor.execute('''
-            CREATE INDEX idx_wav_type 
-            ON acoustic_indices (wav_filepath, processing_type)
+            CREATE INDEX idx_core_file_index ON acoustic_indices_core(file_id, index_name)
             ''')
             
             cursor.execute('''
-            CREATE INDEX idx_npz_type 
-            ON acoustic_indices (npz_filepath, processing_type)
+            CREATE INDEX idx_core_type ON acoustic_indices_core(processing_type)
             ''')
             
-            print(f"✓ Created new acoustic_indices schema")
+            cursor.execute('''
+            CREATE INDEX idx_core_name ON acoustic_indices_core(index_name)
+            ''')
             
-        elif 'wav_filepath' not in columns:
-            # Old schema exists, needs migration
-            print(f"⚠️  Existing acoustic_indices table uses old schema")
-            print(f"   Clear existing data with: DELETE FROM acoustic_indices;")
-            print(f"   Or manually migrate data before proceeding")
-            raise ValueError("Database schema migration required")
+            print(f"✓ Created new acoustic_indices_core schema")
         else:
-            print(f"✓ Database schema up to date")
+            print(f"✓ acoustic_indices_core table exists")
         
         # Create index_configurations table
         self._create_index_configurations_table(cursor)
-        
+
+        # Create v_acoustic_indices view for webapp API
+        cursor.execute('''
+            CREATE VIEW IF NOT EXISTS v_acoustic_indices AS
+            SELECT
+                ai.id,
+                ai.file_id,
+                af.filepath as wav_filepath,
+                af.recording_datetime,
+                ai.index_name,
+                ai.chunk_index,
+                ai.start_time_sec,
+                ai.value,
+                ai.processing_type,
+                ai.computed_at
+            FROM acoustic_indices_core ai
+            JOIN audio_files af ON ai.file_id = af.id
+        ''')
+        print(f"✓ Created/verified v_acoustic_indices view")
+
         conn.commit()
         conn.close()
     
@@ -154,21 +181,15 @@ class DatabaseManager:
             npz_path = npz_filepath  # Optional for temporal
         elif processing_type == "spectral":
             npz_path = filepath
-            # Derive WAV path from NPZ path
-            wav_path = filepath.replace('_spec.npz', '.WAV')
+            # Derive WAV path from NPZ path using cross-platform logic
+            wav_path = self._derive_wav_from_npz(filepath)
         else:
             raise ValueError(f"Unknown processing type: {processing_type}")
         
         # Get file_id using filename-based lookup
         file_id = self._get_file_id(cursor, wav_path)
         
-        # Clear existing indices for this file and processing type
-        cursor.execute('''
-        DELETE FROM acoustic_indices 
-        WHERE wav_filepath = ? AND processing_type = ?
-        ''', (wav_path, processing_type))
-        
-        # Insert new indices data
+        # Prepare data for INSERT OR REPLACE (safe for concurrent processing)
         rows_to_insert = []
         
         for index_name, values in indices_data.items():
@@ -178,8 +199,6 @@ class DatabaseManager:
             for chunk_index, (timestamp, value) in enumerate(zip(chunk_timestamps, values)):
                 rows_to_insert.append((
                     file_id,
-                    wav_path,
-                    npz_path,
                     index_name,
                     chunk_index,
                     float(timestamp),
@@ -188,9 +207,9 @@ class DatabaseManager:
                 ))
         
         cursor.executemany('''
-        INSERT INTO acoustic_indices 
-        (file_id, wav_filepath, npz_filepath, index_name, chunk_index, start_time_sec, value, processing_type)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT OR REPLACE INTO acoustic_indices_core 
+        (file_id, index_name, chunk_index, start_time_sec, value, processing_type)
+        VALUES (?, ?, ?, ?, ?, ?)
         ''', rows_to_insert)
         
         conn.commit()
@@ -199,9 +218,32 @@ class DatabaseManager:
         total_values = sum(len(values) for values in indices_data.items())
         print(f"✓ Stored {total_values} index values for {os.path.basename(filepath)} ({processing_type})")
     
+    def _derive_wav_from_npz(self, npz_filepath: str) -> str:
+        """
+        Derive WAV file path from NPZ file path with cross-platform support
+        
+        Args:
+            npz_filepath: NPZ file path
+            
+        Returns:
+            str: Corresponding WAV file path
+        """
+        if CROSS_PLATFORM_AVAILABLE and self.config:
+            # Use cross-platform path resolution
+            if not os.path.isabs(npz_filepath):
+                # If relative path, resolve it first
+                npz_filepath = resolve_cross_platform_path(self.config, npz_filepath)
+            
+            # Convert NPZ to WAV using volume-aware logic
+            wav_path = npz_filepath.replace('_spec.npz', '.WAV')
+            return wav_path
+        else:
+            # Fallback to simple string replacement
+            return npz_filepath.replace('_spec.npz', '.WAV')
+    
     def _get_file_id(self, cursor: sqlite3.Cursor, wav_filepath: str) -> Optional[int]:
         """
-        Get file_id from audio_files table if it exists
+        Get file_id from audio_files table with cross-platform support
         
         Args:
             cursor: Database cursor
@@ -219,7 +261,21 @@ class DatabaseManager:
         if not cursor.fetchone():
             return None
         
-        # Try to find file_id using filename match
+        # Try cross-platform lookup first if available
+        if CROSS_PLATFORM_AVAILABLE and self.config:
+            try:
+                # Extract relative path for cross-platform lookup
+                volume_prefix, relative_path = split_path_for_database(self.config, wav_filepath)
+                
+                # Try to find by relative_path first
+                cursor.execute('SELECT id FROM audio_files WHERE relative_path = ?', (relative_path,))
+                result = cursor.fetchone()
+                if result:
+                    return result[0]
+            except Exception:
+                pass  # Fall back to filename lookup
+        
+        # Fallback to filename-based lookup for backward compatibility
         filename = os.path.basename(wav_filepath)
         cursor.execute('SELECT id FROM audio_files WHERE filename = ?', (filename,))
         result = cursor.fetchone()
@@ -247,17 +303,23 @@ class DatabaseManager:
         
         # Convert NPZ path to WAV path for spectral processing
         if processing_type == "spectral" and filepath.endswith('_spec.npz'):
-            wav_filepath = filepath.replace('_spec.npz', '.WAV')
+            wav_filepath = self._derive_wav_from_npz(filepath)
         else:
             wav_filepath = filepath
         
-        # Build query with optional filters
+        # Get file_id from wav_filepath 
+        file_id = self._get_file_id(cursor, wav_filepath)
+        if not file_id:
+            conn.close()
+            return {}
+        
+        # Build query with optional filters using core table
         query = '''
         SELECT index_name, chunk_index, value 
-        FROM acoustic_indices 
-        WHERE wav_filepath = ?
+        FROM acoustic_indices_core 
+        WHERE file_id = ?
         '''
-        params = [wav_filepath]
+        params = [file_id]
         
         if processing_type:
             query += ' AND processing_type = ?'
@@ -310,18 +372,48 @@ class DatabaseManager:
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
-        query = 'SELECT DISTINCT wav_filepath FROM acoustic_indices'
-        params = []
+        # Get cross-platform path info if available
+        if CROSS_PLATFORM_AVAILABLE and self.config:
+            query = '''
+            SELECT DISTINCT af.filepath, af.volume_prefix, af.relative_path
+            FROM acoustic_indices_core aic
+            JOIN audio_files af ON aic.file_id = af.id
+            '''
+        else:
+            query = '''
+            SELECT DISTINCT af.filepath 
+            FROM acoustic_indices_core aic
+            JOIN audio_files af ON aic.file_id = af.id
+            '''
         
+        params = []
         if processing_type:
-            query += ' WHERE processing_type = ?'
+            query += ' WHERE aic.processing_type = ?'
             params.append(processing_type)
         
         cursor.execute(query, params)
         results = cursor.fetchall()
         conn.close()
         
-        return [row[0] for row in results]
+        # Resolve paths using cross-platform logic if available
+        file_paths = []
+        for row in results:
+            if CROSS_PLATFORM_AVAILABLE and self.config and len(row) >= 3:
+                # Try to use cross-platform resolution
+                filepath, volume_prefix, relative_path = row
+                if volume_prefix and relative_path:
+                    try:
+                        current_volume = get_volume_prefix(self.config)
+                        resolved_path = reconstruct_path_from_database(current_volume, relative_path)
+                        file_paths.append(resolved_path)
+                        continue
+                    except Exception:
+                        pass  # Fall back to original filepath
+                
+            # Use original filepath as fallback
+            file_paths.append(row[0])
+        
+        return file_paths
     
     def get_index_statistics(self) -> Dict[str, Any]:
         """
@@ -338,10 +430,10 @@ class DatabaseManager:
         
         # Get counts by processing type and index name
         cursor.execute('''
-        SELECT processing_type, index_name, COUNT(*) as count, COUNT(DISTINCT wav_filepath) as files
-        FROM acoustic_indices 
-        GROUP BY processing_type, index_name
-        ORDER BY processing_type, index_name
+        SELECT aic.processing_type, aic.index_name, COUNT(*) as count, COUNT(DISTINCT aic.file_id) as files
+        FROM acoustic_indices_core aic
+        GROUP BY aic.processing_type, aic.index_name
+        ORDER BY aic.processing_type, aic.index_name
         ''')
         
         stats = {
@@ -351,10 +443,10 @@ class DatabaseManager:
         }
         
         # Get totals
-        cursor.execute('SELECT COUNT(DISTINCT wav_filepath) FROM acoustic_indices')
+        cursor.execute('SELECT COUNT(DISTINCT file_id) FROM acoustic_indices_core')
         stats['total_files'] = cursor.fetchone()[0]
         
-        cursor.execute('SELECT COUNT(*) FROM acoustic_indices')
+        cursor.execute('SELECT COUNT(*) FROM acoustic_indices_core')
         stats['total_values'] = cursor.fetchone()[0]
         
         conn.close()
@@ -378,13 +470,20 @@ class DatabaseManager:
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
-        query = 'DELETE FROM acoustic_indices'
+        query = 'DELETE FROM acoustic_indices_core'
         params = []
         conditions = []
         
         if filepath:
-            conditions.append('wav_filepath = ?')
-            params.append(filepath)
+            # Convert filepath to file_id
+            cursor.execute('SELECT id FROM audio_files WHERE filename = ?', (os.path.basename(filepath),))
+            result = cursor.fetchone()
+            if result:
+                conditions.append('file_id = ?')
+                params.append(result[0])
+            else:
+                conn.close()
+                return 0  # File not found
         
         if processing_type:
             conditions.append('processing_type = ?')
@@ -445,21 +544,38 @@ class DatabaseManager:
             wav_file_paths.append(wav_filepath)
             path_mapping[wav_filepath] = filepath
         
-        # Build query with multiple file paths
+        # Get file_ids for wav_file_paths
+        file_id_mapping = {}  # wav_path -> file_id
         placeholders = ','.join('?' * len(wav_file_paths))
+        cursor.execute(f'''
+            SELECT id, filepath FROM audio_files 
+            WHERE filepath IN ({placeholders})
+        ''', wav_file_paths)
+        
+        for file_id, filepath in cursor.fetchall():
+            file_id_mapping[filepath] = file_id
+        
+        if not file_id_mapping:
+            conn.close()
+            return {}
+        
+        # Build query with file_ids
+        file_ids = list(file_id_mapping.values())
+        placeholders = ','.join('?' * len(file_ids))
         query = f'''
-        SELECT wav_filepath, index_name, chunk_index, value 
-        FROM acoustic_indices 
-        WHERE wav_filepath IN ({placeholders}) AND processing_type = ?
+        SELECT af.filepath, aic.index_name, aic.chunk_index, aic.value 
+        FROM acoustic_indices_core aic
+        JOIN audio_files af ON aic.file_id = af.id
+        WHERE aic.file_id IN ({placeholders}) AND aic.processing_type = ?
         '''
-        params = wav_file_paths + [processing_type]
+        params = file_ids + [processing_type]
         
         if index_names:
             index_placeholders = ','.join('?' * len(index_names))
-            query += f' AND index_name IN ({index_placeholders})'
+            query += f' AND aic.index_name IN ({index_placeholders})'
             params.extend(index_names)
         
-        query += ' ORDER BY wav_filepath, index_name, chunk_index'
+        query += ' ORDER BY af.filepath, aic.index_name, aic.chunk_index'
         
         cursor.execute(query, params)
         results = cursor.fetchall()

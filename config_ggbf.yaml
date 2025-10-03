@@ -1,0 +1,152 @@
+input_directory : "/mnt/n/AudioMoth/2025-Set-MacquarieUni/"
+database_path : "/mnt/n/AudioMoth/2025-Set-MacquarieUni/audiomoth.db"
+
+# Audio parameters
+sample_rate: 48000
+file_duration_sec: 600
+
+# Display parameters
+width-px : 1000
+height-px : 300
+border-px : 0
+dpi : 100
+
+# Spectrogram parameters
+n_fft : 2048
+hop_length : 256
+n_mels : 128
+
+# Global contrast normalization range
+global_min : -40
+global_max : 40
+
+# Green and Gold Bell Frog (GGBF) Detection Configuration
+# Species characteristics (based on field observations):
+# - Fundamental frequency starts at ~400 Hz
+# - Banded vertical harmonics (harmonic structure visible in spectrogram)
+# - High energy output (strong SNR)
+# - Broad spectral range with harmonics extending to 6-8kHz+
+# - Two call types: short barks (<1s) and long drawls (up to 3s)
+
+acoustic_indices:
+  temporal:
+    chunk_duration_sec: 3.0  # 3s chunks to capture full long drawls
+
+    # Temporal entropy - differentiates short barks (high) vs long drawls (low)
+    temporal_entropy:
+      processor: temporal_entropy
+      params: {}
+
+    # Temporal activity - detects high energy call events
+    temporal_activity:
+      processor: temporal_activity
+      params: {}
+
+    # Temporal median - baseline energy levels
+    temporal_median:
+      processor: temporal_median
+      params: {}
+
+  spectral:
+    chunk_duration_sec: 3.0  # 3s chunks to capture full long drawls
+
+    # === HARMONIC BAND DETECTION (GGBF banded vertical harmonics) ===
+
+    # Acoustic Complexity Index - detects temporal amplitude variation in calls
+    acoustic_complexity_index:
+      processor: acoustic_complexity_index
+      params: {}
+
+    # Bioacoustic Index for fundamental (GGBF starts at ~400Hz)
+    ggbf_bai_fundamental_400-800:
+      processor: bioacoustics_index
+      params:
+        freq_min: 400
+        freq_max: 800
+
+    # Bioacoustic Index for 1st harmonic band
+    ggbf_bai_harmonic1_800-1600:
+      processor: bioacoustics_index
+      params:
+        freq_min: 800
+        freq_max: 1600
+
+    # Bioacoustic Index for 2nd harmonic band
+    ggbf_bai_harmonic2_1600-3200:
+      processor: bioacoustics_index
+      params:
+        freq_min: 1600
+        freq_max: 3200
+
+    # Bioacoustic Index for upper harmonics
+    ggbf_bai_harmonic3_3200-8000:
+      processor: bioacoustics_index
+      params:
+        freq_min: 3200
+        freq_max: 8000
+
+    # Soundscape Index - discriminate GGBF (bio) from low-frequency noise (anthro)
+    ggbf_soundscape:
+      processor: soundscape_index
+      params:
+        bioacoustic_freq_min: 400
+        bioacoustic_freq_max: 8000
+        anthropogenic_freq_min: 0
+        anthropogenic_freq_max: 400
+
+    # === SPECTRAL DISTRIBUTION ===
+
+    # Spectral entropy - measures frequency distribution uniformity
+    spectral_entropy:
+      processor: spectral_entropy
+      params: {}
+
+    # Frequency entropy - frequency concentration
+    frequency_entropy:
+      processor: frequency_entropy
+      params: {}
+
+    # Acoustic Evenness Index - spectral evenness across bands
+    acoustic_evenness_index:
+      processor: acoustic_evenness_index
+      params: {}
+
+    # Acoustic Diversity Index - spectral diversity
+    acoustic_diversity_index:
+      processor: acoustic_diversity_index
+      params: {}
+
+    # === ACTIVITY DETECTION (aligned with harmonic bands) ===
+
+    # Spectral activity in fundamental band (primary GGBF detector)
+    ggbf_spectral_activity_fundamental:
+      processor: maad_spectral_activity
+      params:
+        freq_min: 400
+        freq_max: 800
+
+    # Spectral activity in 1st harmonic band
+    ggbf_spectral_activity_harmonic1:
+      processor: maad_spectral_activity
+      params:
+        freq_min: 800
+        freq_max: 1600
+
+    # Spectral activity in 2nd harmonic band
+    ggbf_spectral_activity_harmonic2:
+      processor: maad_spectral_activity
+      params:
+        freq_min: 1600
+        freq_max: 3200
+
+    # Spectral activity in upper harmonics
+    ggbf_spectral_activity_harmonic3:
+      processor: maad_spectral_activity
+      params:
+        freq_min: 3200
+        freq_max: 8000
+
+    # Number of peaks - counts discrete call events
+    number_of_peaks:
+      processor: number_of_peaks
+      params: {}

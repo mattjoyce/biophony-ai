@@ -20,7 +20,8 @@ import yaml
 from filelock import FileLock, Timeout
 
 from spectrogram_utils import (create_mel_frequency_vector, create_time_vector,
-                               find_all_wav_files, save_spectrogram)
+                               find_all_wav_files, save_spectrogram,
+                               get_spectrogram_path_cross_platform)
 
 
 def parse_arguments():
@@ -119,8 +120,8 @@ def setup_database_schema(config):
         print(f"⚠️ Database schema update failed: {e}")
 
 
-def store_file_statistics(filepath, stats, config):
-    """Store per-file spectrogram statistics in database"""
+def store_file_statistics(filepath, stats, config, npz_path=None):
+    """Store per-file spectrogram statistics and NPZ path in database"""
     db_path = config.get("database_path")
     if not db_path:
         raise ValueError("❌ No database_path specified in config file")
@@ -133,21 +134,40 @@ def store_file_statistics(filepath, stats, config):
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
 
-        cursor.execute(
-            """
-        UPDATE audio_files 
-        SET spectrogram_min_abs = ?, spectrogram_max_abs = ?, 
-            spectrogram_min_p2 = ?, spectrogram_max_p98 = ?
-        WHERE filepath = ?
-        """,
-            (
-                stats["min_abs"],
-                stats["max_abs"],
-                stats["min_p2"],
-                stats["max_p98"],
-                filepath,
-            ),
-        )
+        # Check if npz_filepath column exists
+        cursor.execute("PRAGMA table_info(audio_files)")
+        columns = [col[1] for col in cursor.fetchall()]
+        has_npz_column = 'npz_filepath' in columns
+        
+        if has_npz_column and npz_path:
+            cursor.execute(
+                """
+            UPDATE audio_files 
+            SET spectrogram_min = ?, spectrogram_max = ?, 
+                npz_filepath = ?
+            WHERE filepath = ?
+            """,
+                (
+                    stats["min_abs"],
+                    stats["max_abs"],
+                    npz_path,
+                    filepath,
+                ),
+            )
+        else:
+            # Fallback for databases without npz_filepath column or new schema
+            cursor.execute(
+                """
+            UPDATE audio_files 
+            SET spectrogram_min = ?, spectrogram_max = ?
+            WHERE filepath = ?
+            """,
+                (
+                    stats["min_abs"],
+                    stats["max_abs"],
+                    filepath,
+                ),
+            )
 
         conn.commit()
         conn.close()
@@ -247,13 +267,17 @@ def process_single_file(
 ):
     """Process one audio file - save raw spectral data"""
 
-    # Check if NPZ already exists
-    audio_dir = os.path.dirname(audio_file)
-    audio_basename = os.path.basename(audio_file)
-    npz_filename = audio_basename.replace(".WAV", "_spec.npz").replace(
-        ".wav", "_spec.npz"
-    )
-    output_file = os.path.join(audio_dir, npz_filename)
+    # Generate NPZ output path using cross-platform logic
+    try:
+        output_file = get_spectrogram_path_cross_platform(config, audio_file)
+    except Exception:
+        # Fallback to original path construction if cross-platform fails
+        audio_dir = os.path.dirname(audio_file)
+        audio_basename = os.path.basename(audio_file)
+        npz_filename = audio_basename.replace(".WAV", "_spec.npz").replace(
+            ".wav", "_spec.npz"
+        )
+        output_file = os.path.join(audio_dir, npz_filename)
 
     if os.path.exists(output_file) and not force:
         return "exists"
@@ -301,7 +325,7 @@ def process_single_file(
         )
 
         # Store statistics in database
-        store_file_statistics(audio_file, stats, config)
+        store_file_statistics(audio_file, stats, config, npz_path=output_file)
 
         # Cleanup
         del waveform, mel_spec, mel_spec_db

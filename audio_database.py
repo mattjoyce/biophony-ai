@@ -10,13 +10,21 @@ import sqlite3
 import sys
 from datetime import datetime
 from pathlib import Path
+from typing import Dict, Any, Optional
 
 from metamoth import parse_metadata
+from spectrogram_utils import (
+    get_volume_prefix,
+    split_path_for_database,
+    reconstruct_path_from_database,
+    resolve_cross_platform_path
+)
 
 
 class AudioDatabase:
-    def __init__(self, db_path="audiomoth.db"):
+    def __init__(self, db_path="audiomoth.db", config: Optional[Dict[str, Any]] = None):
         self.db_path = db_path
+        self.config = config
         self.init_database()
 
     def init_database(self):
@@ -31,6 +39,9 @@ class AudioDatabase:
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             filename TEXT NOT NULL,
             filepath TEXT NOT NULL UNIQUE,
+            volume_prefix TEXT,
+            relative_path TEXT,
+            npz_filepath TEXT,
             file_size INTEGER,
             recording_datetime DATETIME,
             timezone TEXT,
@@ -48,6 +59,14 @@ class AudioDatabase:
             deployment_id TEXT,
             external_microphone BOOLEAN,
             comment TEXT,
+            spectrogram_min REAL,
+            spectrogram_max REAL,
+            aci_min REAL,
+            aci_max REAL,
+            aci_mean REAL,
+            processing_status TEXT DEFAULT NULL,
+            weather_id INTEGER,
+            site_id INTEGER,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )
@@ -158,8 +177,8 @@ class AudioDatabase:
         conn.commit()
         conn.close()
 
-    def add_audio_file(self, filepath):
-        """Add an audio file to the database."""
+    def add_audio_file(self, filepath, volume_prefix: Optional[str] = None):
+        """Add an audio file to the database with cross-platform path support."""
         try:
             # Get file stats
             stat = os.stat(filepath)
@@ -168,6 +187,17 @@ class AudioDatabase:
             # Parse metadata using metamoth
             metadata = parse_metadata(filepath)
 
+            # Handle cross-platform path splitting
+            if self.config:
+                volume_prefix_db, relative_path = split_path_for_database(self.config, filepath)
+            elif volume_prefix:
+                volume_prefix_db = volume_prefix
+                relative_path = filepath[len(volume_prefix):].lstrip('/')
+            else:
+                # Fallback: store full path in filepath, leave volume fields empty
+                volume_prefix_db = None
+                relative_path = None
+
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
 
@@ -175,16 +205,18 @@ class AudioDatabase:
             cursor.execute(
                 """
             INSERT OR REPLACE INTO audio_files (
-                filename, filepath, file_size, recording_datetime, timezone,
-                audiomoth_id, firmware_version, duration_seconds, samplerate_hz,
-                channels, samples, gain, battery_voltage, low_battery,
-                temperature_c, recording_state, deployment_id, external_microphone,
-                comment, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                filename, filepath, volume_prefix, relative_path, file_size, 
+                recording_datetime, timezone, audiomoth_id, firmware_version, 
+                duration_seconds, samplerate_hz, channels, samples, gain, 
+                battery_voltage, low_battery, temperature_c, recording_state, 
+                deployment_id, external_microphone, comment, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
             """,
                 (
                     os.path.basename(filepath),
-                    filepath,
+                    filepath,  # Keep full path for backward compatibility
+                    volume_prefix_db,
+                    relative_path,
                     file_size,
                     metadata.datetime.isoformat(),
                     str(metadata.timezone),
@@ -374,6 +406,49 @@ class AudioDatabase:
                     continue
 
         return True
+    
+    def resolve_file_path(self, file_record: Dict[str, Any]) -> str:
+        """Resolve file path from database record using current config."""
+        # If volume_prefix and relative_path are available, use them
+        if file_record.get('volume_prefix') and file_record.get('relative_path'):
+            if self.config:
+                # Use current config's volume prefix
+                current_volume = get_volume_prefix(self.config)
+                return reconstruct_path_from_database(current_volume, file_record['relative_path'])
+            else:
+                # Use stored volume prefix
+                return reconstruct_path_from_database(file_record['volume_prefix'], file_record['relative_path'])
+        
+        # Fallback to original filepath
+        return file_record['filepath']
+    
+    def find_file_by_relative_path(self, relative_path: str):
+        """Find file by relative path (cross-platform lookup)."""
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT * FROM audio_files WHERE relative_path = ?", (relative_path,))
+        result = cursor.fetchone()
+        conn.close()
+        
+        return dict(result) if result else None
+    
+    def update_npz_filepath(self, file_id: int, npz_filepath: str):
+        """Update NPZ filepath for a file record."""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        cursor.execute(
+            "UPDATE audio_files SET npz_filepath = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (npz_filepath, file_id)
+        )
+        
+        conn.commit()
+        success = cursor.rowcount > 0
+        conn.close()
+        
+        return success
 
     # POI (Points of Interest) Management Methods
     

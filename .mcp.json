@@ -1,0 +1,20 @@
+{
+  "mcpServers": {
+    "sqlite-server": {
+      "type": "stdio",
+      "command": "uvx",
+      "args": [
+        "mcp-server-sqlite",
+        "--db-path",
+        "/mnt/n/AudioMoth/2025-Set-MacquarieUni/audiomoth.db"
+      ],
+      "env": {
+        "DB_PATH": "/mnt/n/AudioMoth/2025-Set-MacquarieUni/audiomoth.db"
+      }
+    },
+    "chrome-devtools": {
+      "command": "npx",
+      "args": ["-y", "chrome-devtools-mcp@latest"]
+    }
+  }
+}
