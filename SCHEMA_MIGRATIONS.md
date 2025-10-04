@@ -2,6 +2,91 @@
 
 This document tracks all schema changes and provides migration paths for existing databases.
 
+## Version 3.0 (2025-10-04)
+
+**Added:**
+- `weather_sites` table - Recording site weather metadata
+- `weather_data` table - Hourly weather observations with sunrise/sunset
+- `audio_files.weather_id` column - Links to weather_data
+- `audio_files.site_id` column - Links to weather_sites
+- `audio_files.time_since_last` column - Sunrise/sunset temporal labels (e.g., "SR+02:30")
+- `audio_files.time_to_next` column - Temporal labels to next event (e.g., "SS−01:15")
+
+**Migration from 2.0:**
+
+```sql
+-- Create weather tables
+CREATE TABLE IF NOT EXISTS weather_sites (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    latitude REAL NOT NULL,
+    longitude REAL NOT NULL,
+    elevation REAL,
+    timezone TEXT,
+    timezone_abbreviation TEXT,
+    UNIQUE(latitude, longitude)
+);
+
+CREATE TABLE IF NOT EXISTS weather_data (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    site_id INTEGER REFERENCES weather_sites(id),
+    datetime TEXT NOT NULL,
+    temperature_2m REAL,
+    relative_humidity_2m REAL,
+    precipitation REAL,
+    wind_speed_10m REAL,
+    weather_code INTEGER,
+    cloud_cover REAL,
+    pressure_msl REAL,
+    sunrise_time TEXT,
+    sunset_time TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(site_id, datetime)
+);
+
+-- Add weather columns to audio_files
+ALTER TABLE audio_files ADD COLUMN weather_id INTEGER REFERENCES weather_data(id);
+ALTER TABLE audio_files ADD COLUMN site_id INTEGER REFERENCES weather_sites(id);
+ALTER TABLE audio_files ADD COLUMN time_since_last TEXT;
+ALTER TABLE audio_files ADD COLUMN time_to_next TEXT;
+
+-- Update schema version
+INSERT INTO schema_version (version, description)
+VALUES ('3.0', 'Added weather integration with sunrise/sunset temporal labels');
+```
+
+**Setup Weather Integration:**
+
+1. Add weather configuration to your config YAML (see `config_macquarie.yaml` for example):
+```yaml
+weather:
+  enabled: true
+  sites:
+    - name: "Your Site Name"
+      latitude: -33.7747
+      longitude: 151.1122
+  date_range:
+    start_date: "2025-09-15"
+    end_date: "2025-10-03"
+```
+
+2. Run weather integration:
+```bash
+python3 weather_integration.py --config config_macquarie.yaml
+```
+
+This will:
+- Create weather tables
+- Fetch historical weather from Open-Meteo API (free)
+- Link audio files to weather records
+- Calculate sunrise/sunset temporal labels
+
+**Data Sources:**
+- Weather: [Open-Meteo Historical Weather API](https://open-meteo.com/en/docs/historical-weather-api) (free, no API key required)
+- Sunrise/sunset automatically included in weather data
+
+---
+
 ## Version 2.0 (2025-10-03)
 
 **Added:**

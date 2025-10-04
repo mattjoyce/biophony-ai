@@ -3,7 +3,7 @@ database_path : "/mnt/n/AudioMoth/2025-Set-MacquarieUni/audiomoth.db"
 
 # Audio parameters
 sample_rate: 48000
-file_duration_sec: 900
+file_duration_sec: 600  # Macquarie Uni AudioMoth recordings are 10 minutes
 
 # Display parameters
 width-px : 1000
@@ -70,3 +70,43 @@ acoustic_indices:
     frequency_entropy:
       processor: frequency_entropy
       params: {}
+
+# Weather integration
+weather:
+  enabled: true
+  cache_directory: ".weather_cache"
+  api_provider: "open-meteo"
+
+  variables:
+    - temperature_2m
+    - relative_humidity_2m
+    - precipitation
+    - wind_speed_10m
+    - weather_code
+    - cloud_cover
+    - pressure_msl
+
+  sunrise_sunset:
+    enabled: true
+    temporal_labels: true
+
+  temporal:
+    resolution: "hourly"
+    timezone_handling: "auto"
+    interpolation: "nearest"
+
+  sites:
+    - name: "Macquarie University"
+      latitude: -33.7747
+      longitude: 151.1122
+
+  date_range:
+    start_date: "2025-09-15"
+    end_date: "2025-10-03"
+
+  thresholds:
+    high_wind_speed: 15.0
+    heavy_precipitation: 5.0
+    temperature_range:
+      min: 5.0
+      max: 35.0
