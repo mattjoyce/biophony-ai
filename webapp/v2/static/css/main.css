@@ -635,17 +635,24 @@ body {
     overflow: hidden;
     justify-content: center;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-    min-height: 300px;
+    min-height: 400px;
+    flex: 1;
     /* Lower z-index to allow easepick to appear above */
     z-index: 1;
     padding-top: 10px;
+}
+
+/* RGB Strip Container */
+#rgb-strip-container {
+    width: 100%;
+    display: block;
 }
 
 /* Canvas wrapper for proper cursor positioning */
 .spectrogram .canvas-wrapper {
     position: relative;
     width: 100%;
-    height: 100%;
+    flex: 1;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -732,6 +739,7 @@ body {
     padding: 4px 8px;
     cursor: pointer;
     font-size: 12px;
+    font-family: 'Segoe UI Symbol', 'Apple Color Emoji', 'Noto Color Emoji', sans-serif;
     min-width: 24px;
     height: 24px;
     transition: background-color 0.2s ease;

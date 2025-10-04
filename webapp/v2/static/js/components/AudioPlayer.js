@@ -28,20 +28,27 @@ export class AudioPlayer {
         if (this.playPauseBtn) {
             this.playPauseBtn.addEventListener('click', () => this.togglePlayPause());
         }
-        
+
         if (this.stopBtn) {
             this.stopBtn.addEventListener('click', () => this.stop());
         }
-        
-        // Setup spectrogram click-to-play
-        if (this.spectrogramViewer) {
-            const canvas = this.spectrogramViewer.getCanvas();
-            if (canvas) {
-                canvas.addEventListener('click', (e) => this.handleSpectrogramClick(e));
-            }
-        }
-        
+
+        // Setup spectrogram click-to-play - use a slight delay to ensure canvas is ready
+        this.attachSpectrogramClickListener();
+
         this.updateControls(false);
+    }
+
+    attachSpectrogramClickListener() {
+        if (!this.spectrogramViewer) return;
+
+        const canvas = this.spectrogramViewer.getCanvas();
+        if (canvas) {
+            canvas.addEventListener('click', (e) => this.handleSpectrogramClick(e));
+        } else {
+            // Retry after a short delay if canvas not ready yet
+            setTimeout(() => this.attachSpectrogramClickListener(), 50);
+        }
     }
     
     bindStateEvents() {
@@ -118,17 +125,15 @@ export class AudioPlayer {
             console.warn('No audio file loaded');
             return;
         }
-        
+
         const canvas = this.spectrogramViewer.getCanvas();
         const rect = canvas.getBoundingClientRect();
         const x = e.clientX - rect.left;
-        
-        // Calculate time offset using canvas display width
-        const state = this.stateManager.getState();
-        const currentFile = state.currentFile;
-        const duration = currentFile ? currentFile.duration_seconds : 900;
+
+        // Get duration from Howler audio object (most reliable)
+        const duration = this.audio.duration();
         const timeOffset = (x / rect.width) * duration;
-        
+
         this.playAtTime(timeOffset);
     }
     
@@ -212,17 +217,17 @@ export class AudioPlayer {
     
     updateCursorPosition(currentTime) {
         if (!this.cursor || !this.spectrogramViewer) return;
-        
+
         const canvas = this.spectrogramViewer.getCanvas();
-        const state = this.stateManager.getState();
-        const currentFile = state.currentFile;
-        const duration = currentFile ? currentFile.duration_seconds : 900;
-        
+
+        // Get duration from Howler audio object (most reliable)
+        const duration = this.audio ? this.audio.duration() : 900;
+
         const progress = currentTime / duration;
         // Use same approach as crosshairs: simple pixel calculation
         const rect = canvas.getBoundingClientRect();
         const x = progress * rect.width;
-        
+
         this.cursor.style.left = x + 'px';
     }
     
@@ -259,14 +264,13 @@ export class AudioPlayer {
     
     updateTimeDisplay(currentTime) {
         if (!this.timeDisplay) return;
-        
-        const state = this.stateManager.getState();
-        const currentFile = state.currentFile;
-        const duration = currentFile ? currentFile.duration_seconds : 900;
-        
+
+        // Get duration from Howler audio object (most reliable)
+        const duration = this.audio ? this.audio.duration() : 900;
+
         const current = this.formatTime(currentTime);
         const total = this.formatTime(duration);
-        
+
         this.timeDisplay.textContent = `${current} / ${total}`;
     }
     

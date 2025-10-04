@@ -218,14 +218,7 @@ export class Timeline {
                 this.ctx.arc(x, y, radius, 0, 2 * Math.PI);
                 this.ctx.fill();
             }
-            
-            // Draw white border (separate path)
-            this.ctx.strokeStyle = '#fff';
-            this.ctx.lineWidth = 2;
-            this.ctx.beginPath();
-            this.ctx.arc(x, y, radius, 0, 2 * Math.PI);
-            this.ctx.stroke();
-            
+
             // Draw selection ring if selected
             if (isSelected) {
                 this.ctx.strokeStyle = '#dc3545';
