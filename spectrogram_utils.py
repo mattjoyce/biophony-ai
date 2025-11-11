@@ -152,6 +152,22 @@ def get_spectrogram_path(wav_path: str) -> str:
     base_path = wav_path.replace('.WAV', '').replace('.wav', '')
     return f"{base_path}_spec.npz"
 
+def create_linear_frequency_vector(sample_rate: int, n_fft: int) -> np.ndarray:
+    """
+    Create linear frequency centers in Hz
+    
+    Args:
+        sample_rate: Audio sample rate
+        n_fft: FFT window size
+        
+    Returns:
+        Array of linear frequency centers in Hz [n_fft//2 + 1]
+    """
+    # Linear frequency bins from 0 to Nyquist
+    n_freqs = n_fft // 2 + 1
+    frequencies = np.linspace(0, sample_rate / 2, n_freqs)
+    return frequencies
+
 def create_mel_frequency_vector(sample_rate: int, n_fft: int, n_mels: int) -> np.ndarray:
     """
     Create mel frequency centers in Hz

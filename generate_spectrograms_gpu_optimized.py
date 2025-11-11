@@ -19,7 +19,7 @@ import torchaudio.transforms as T
 import yaml
 from filelock import FileLock, Timeout
 
-from spectrogram_utils import (create_mel_frequency_vector, create_time_vector,
+from spectrogram_utils import (create_linear_frequency_vector, create_time_vector,
                                find_all_wav_files, save_spectrogram,
                                get_spectrogram_path_cross_platform)
 
@@ -263,7 +263,7 @@ def calculate_global_statistics(config):
 
 
 def process_single_file(
-    audio_file, mel_transform, config, device, freq_vector, force=False
+    audio_file, spectrogram_transform, config, device, freq_vector, force=False
 ):
     """Process one audio file - save raw spectral data"""
 
@@ -287,38 +287,38 @@ def process_single_file(
         waveform, sample_rate = torchaudio.load(audio_file)
         waveform = waveform.to(device)
 
-        # Generate spectrogram on GPU
-        mel_spec = mel_transform(waveform)
-        mel_spec_db = T.AmplitudeToDB()(mel_spec)
+        # Generate linear spectrogram on GPU
+        linear_spec = spectrogram_transform(waveform)
+        linear_spec_db = T.AmplitudeToDB()(linear_spec)
 
         # Move to CPU and convert to numpy
-        mel_spec_db = mel_spec_db.cpu().numpy()
-        if len(mel_spec_db.shape) == 3:
-            mel_spec_db = mel_spec_db[0]  # Remove batch dimension
+        linear_spec_db = linear_spec_db.cpu().numpy()
+        if len(linear_spec_db.shape) == 3:
+            linear_spec_db = linear_spec_db[0]  # Remove batch dimension
 
         # Calculate spectrogram statistics
-        mel_flat = mel_spec_db.flatten()
+        spec_flat = linear_spec_db.flatten()
         stats = {
-            "min_abs": float(np.min(mel_flat)),
-            "max_abs": float(np.max(mel_flat)),
-            "min_p2": float(np.percentile(mel_flat, 2)),
-            "max_p98": float(np.percentile(mel_flat, 98)),
+            "min_abs": float(np.min(spec_flat)),
+            "max_abs": float(np.max(spec_flat)),
+            "min_p2": float(np.percentile(spec_flat, 2)),
+            "max_p98": float(np.percentile(spec_flat, 98)),
         }
 
         # Create time vector
         hop_length = config.get("hop_length", 256)
-        time_bins = create_time_vector(mel_spec_db.shape[1], hop_length, sample_rate)
+        time_bins = create_time_vector(linear_spec_db.shape[1], hop_length, sample_rate)
 
         # Save using standardized utils
         save_spectrogram(
             output_path=output_file,
-            spec=mel_spec_db,
+            spec=linear_spec_db,
             fn=freq_vector,
             time_bins=time_bins,
             sample_rate=sample_rate,
             n_fft=config.get("n_fft", 2048),
             hop_length=hop_length,
-            n_mels=config.get("n_mels", 128),
+            n_mels=linear_spec_db.shape[0],  # Use actual frequency bins count
             power=2.0,
             db_scale=True,
             normalization=False,
@@ -328,7 +328,7 @@ def process_single_file(
         store_file_statistics(audio_file, stats, config, npz_path=output_file)
 
         # Cleanup
-        del waveform, mel_spec, mel_spec_db
+        del waveform, linear_spec, linear_spec_db
 
         return "created"
 
@@ -346,10 +346,10 @@ def main():
     # Setup database schema for statistics
     setup_database_schema(config)
 
-    # Create frequency vector for mel scale
+    # Create frequency vector for linear scale
     n_fft = config.get("n_fft", 2048)
-    n_mels = config.get("n_mels", 128)
-    freq_vector = create_mel_frequency_vector(48000, n_fft, n_mels)
+    sample_rate = config.get("sample_rate", 48000)
+    freq_vector = create_linear_frequency_vector(sample_rate, n_fft)
 
     # Handle single file mode
     if args.single_file:
@@ -413,12 +413,10 @@ def main():
         print("🚀 Use without --dry-run to execute actual processing")
         return
 
-    # Create mel transform
-    mel_transform = T.MelSpectrogram(
-        sample_rate=48000,
+    # Create spectrogram transform (linear frequency scale for scientific accuracy)
+    spectrogram_transform = T.Spectrogram(
         n_fft=config.get("n_fft", 2048),
         hop_length=config.get("hop_length", 256),
-        n_mels=config.get("n_mels", 128),
         power=2.0,
     ).to(device)
 
@@ -441,7 +439,7 @@ def main():
         try:
             with FileLock(lock_path, timeout=0):
                 result = process_single_file(
-                    wav_file, mel_transform, config, device, freq_vector, args.force
+                    wav_file, spectrogram_transform, config, device, freq_vector, args.force
                 )
         except Timeout:
             # File is locked by another process, skip it
