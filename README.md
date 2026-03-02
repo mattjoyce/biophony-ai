@@ -286,3 +286,6 @@ BiophonyAI builds upon excellent open-source projects:
 ---
 
 *Advancing ecological research through AI-powered acoustic analysis* 🎵🔬
+
+## Changelog
+See [CHANGELOG.md](CHANGELOG.md).
