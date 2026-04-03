@@ -2,56 +2,26 @@
 
 ## Prerequisites
 
-- Python 3.11+ with venv
-- NVIDIA GPU (for spectrogram generation)
+- Python 3.11+
 - AudioMoth recordings in WAV format
+- GPU optional — CPU processing works, spectrogram generation is slower
 
 ## Complete Setup Workflow
 
-### 1. Scan Audio Files
+See `docs/PIPELINE_TUTORIAL.md` for the full step-by-step tutorial with explanations.
 
-First, scan your AudioMoth recordings into the database:
-
-```bash
-source venv/bin/activate
-python3 scan_audio_database.py --config <your-config.yaml>
-```
-
-This creates the database and populates the `audio_files` table.
-
-### 2. Process Acoustic Indices
-
-Process acoustic indices to populate the database with analysis data:
+### Quick Reference
 
 ```bash
-python3 process_acoustic_indices.py <your-config.yaml>
+python3 scan_audio_database.py --config <your-config.yaml> --init
+python3 scan_audio_database.py --config <your-config.yaml> --scan
+python3 generate_spectrograms_gpu_optimized.py --config <your-config.yaml> --target 0 1 2 3 4 5 6 7 8 9
+python3 process_acoustic_indices.py --config <your-config.yaml> --TEMPORAL --target 0 1 2 3 4 5 6 7 8 9
+python3 process_acoustic_indices.py --config <your-config.yaml> --SPECTRAL --target 0 1 2 3 4 5 6 7 8 9
+python3 generate_png_ultra_fast.py --config <your-config.yaml> --target 0 1 2 3 4 5 6 7 8 9
 ```
 
-This will:
-- Create `acoustic_indices_core` table
-- Create `index_configurations` table
-- Create `v_acoustic_indices` view (required for webapp)
-- Process temporal and spectral indices
-
-### 3. Generate Spectrogram Data (NPZ files)
-
-Generate mel-spectrogram data files:
-
-```bash
-python3 generate_spectrograms_gpu_optimized.py --config <your-config.yaml> --target 0
-```
-
-**Note:** Use `--target 0` to process all files. For parallel processing on multi-GPU systems, use multiple targets (0, 1, 2, etc.)
-
-### 4. Generate PNG Images
-
-Generate PNG spectrogram images from NPZ data:
-
-```bash
-python3 generate_png_ultra_fast.py --config <your-config.yaml> --target 0
-```
-
-This creates `*_spec.png` files in the same directory as your WAV files.
+**Note:** `--target 0 1 2 3 4 5 6 7 8 9` selects all processing shards. Always pass all 10 on a single machine.
 
 ### 5. (Optional) Add Weather Data
 
@@ -72,11 +42,11 @@ Weather data integration uses the free Open-Meteo API (no API key needed):
 python3 weather_integration.py --config <your-config.yaml>
 ```
 
-### 6. Start the Webapp
+### Start the Webapp
 
 ```bash
 cd webapp/v2/backend
-python3 app.py --config <your-config.yaml> --port 8001
+python3 app.py --config ../../../<your-config.yaml> --port 8001
 ```
 
 Open browser to: http://127.0.0.1:8001

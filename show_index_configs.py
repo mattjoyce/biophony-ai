@@ -6,10 +6,10 @@ Show stored acoustic index configurations from database
 
 import sys
 import argparse
-import yaml
 from indices.database_manager import DatabaseManager
 import json
 from pathlib import Path
+from config_utils import load_config
 
 
 def main():
@@ -22,8 +22,7 @@ def main():
     
     # Load config to get database path
     try:
-        with open(args.config, 'r') as f:
-            config = yaml.safe_load(f)
+        config = load_config(args.config)
     except FileNotFoundError:
         print(f"❌ Config file not found: {args.config}")
         return

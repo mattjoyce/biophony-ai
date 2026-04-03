@@ -14,7 +14,7 @@ from pathlib import Path
 from PIL import Image, ExifTags
 import logging
 import argparse
-import yaml
+from config_utils import load_config
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -517,12 +517,10 @@ def parse_arguments():
     
     return parser.parse_args()
 
-def load_config(config_path):
-    """Load YAML configuration file"""
+def _load_config_safe(config_path):
+    """Load YAML configuration file, returning None on error."""
     try:
-        with open(config_path, 'r') as f:
-            config = yaml.safe_load(f)
-        return config
+        return load_config(config_path)
     except Exception as e:
         print(f"❌ Error loading config file {config_path}: {e}")
         return None
@@ -618,7 +616,7 @@ def main():
     args = parse_arguments()
     
     # Load configuration
-    config = load_config(args.config)
+    config = _load_config_safe(args.config)
     if not config:
         return
     

@@ -6,12 +6,12 @@ No matplotlib overhead - should be 50-100x faster
 
 import os
 import numpy as np
-import yaml
 import argparse
 import time
 from PIL import Image
 from pathlib import Path
 from filelock import FileLock, Timeout
+from config_utils import load_config
 from spectrogram_utils import find_all_spectrogram_files, load_spectrogram
 
 def parse_arguments():
@@ -22,10 +22,6 @@ def parse_arguments():
     parser.add_argument("--target", type=int, nargs='+', help="Target subset(s) (not used with --single-file)")
     parser.add_argument("--force", "-f", action="store_true", help="Force regeneration of existing PNGs")
     return parser.parse_args()
-
-def load_config(config_path):
-    with open(config_path, 'r') as file:
-        return yaml.safe_load(file)
 
 def create_ultra_fast_png(npz_path, config, force=False):
     """Create PNG using PIL directly - ultra fast"""

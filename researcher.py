@@ -10,10 +10,10 @@ from rich.table import Table
 from rich.progress import Progress
 from rich.tree import Tree
 from rich.prompt import Confirm
-import yaml
 import sys
 from pathlib import Path
 from audio_database import AudioDatabase
+from config_utils import load_config
 
 console = Console()
 
@@ -27,13 +27,12 @@ def cli(ctx, config, dry_run):
     
     # Load config
     try:
-        with open(config, 'r') as f:
-            ctx.obj['config'] = yaml.safe_load(f)
+        ctx.obj['config'] = load_config(config)
     except FileNotFoundError:
         console.print(f"[red]❌ Config file not found: {config}[/red]")
         ctx.exit(1)
-    except yaml.YAMLError as e:
-        console.print(f"[red]❌ Invalid YAML config: {e}[/red]")
+    except Exception as e:
+        console.print(f"[red]❌ Failed to load config: {e}[/red]")
         ctx.exit(1)
     
     ctx.obj['config_path'] = config

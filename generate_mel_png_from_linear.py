@@ -6,13 +6,13 @@ Converts linear spectrograms to mel scale for better visualization while preserv
 
 import os
 import numpy as np
-import yaml
 import argparse
 import time
 from PIL import Image
 from pathlib import Path
 import torch
 import torchaudio.transforms as T
+from config_utils import load_config
 from spectrogram_utils import find_all_spectrogram_files, load_spectrogram, create_mel_frequency_vector
 
 def parse_arguments():
@@ -23,10 +23,6 @@ def parse_arguments():
     parser.add_argument("--target", type=int, nargs='+', help="Target subset(s) (not used with --single-file)")
     parser.add_argument("--force", "-f", action="store_true", help="Force regeneration of existing PNGs")
     return parser.parse_args()
-
-def load_config(config_path):
-    with open(config_path, 'r') as file:
-        return yaml.safe_load(file)
 
 def setup_gpu():
     """Setup GPU device for mel conversion"""

@@ -10,11 +10,11 @@ import sys
 import tempfile
 import uuid
 import argparse
-import yaml
 
 # Add parent directory to path to import modules
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 from audio_database import AudioDatabase
+from config_utils import load_config
 
 app = Flask(__name__)
 
@@ -583,11 +583,6 @@ def upload_labels():
             temp_file.close()
         if temp_path and os.path.exists(temp_path):
             os.remove(temp_path)
-
-def load_config(config_path):
-    """Load configuration from YAML file."""
-    with open(config_path, 'r') as file:
-        return yaml.safe_load(file)
 
 if __name__ == '__main__':
     # Parse command line arguments

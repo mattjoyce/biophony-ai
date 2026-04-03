@@ -1293,7 +1293,7 @@
                 }
             }
             // Fallback to input value
-            return document.getElementById('datepicker').value || '2025-06-20';
+            return document.getElementById('datepicker').value || '';
         }
 
         function changeDate(direction) {
@@ -1676,15 +1676,14 @@
             const paramTime = urlParams.get('time');
             const paramColormap = urlParams.get('colormap');
             
-            // Set date from URL parameter or default
-            const dateValue = paramDate || '2025-06-20';
-            console.log('Set date to:', dateValue);
-            
             // Wait for available times to load, then initialize easepick
             loadAvailableTimes().then(() => {
                 // Get available dates from the loaded data
                 const availableDates = Object.keys(availableTimes).sort();
                 console.log('Available dates for easepick:', availableDates);
+                // Use URL param date, or first available date in dataset
+                const dateValue = paramDate || availableDates[0] || '';
+                console.log('Set date to:', dateValue);
                 
                 try {
                     const picker = new easepick.create({

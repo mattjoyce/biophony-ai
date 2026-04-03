@@ -6,6 +6,7 @@ PyYAML>=6.0
 # Audio processing
 torch>=2.0.0
 torchaudio>=2.0.0
+soundfile>=0.12.0
 metamoth>=1.0.0
 
 # Image processing  
@@ -16,6 +17,7 @@ seaborn>=0.12.0
 # Web framework (Flask webapp)
 Flask>=2.3.0
 SQLAlchemy>=2.0.0
+rich>=13.0.0
 
 # HTTP and API clients
 requests>=2.31.0
@@ -25,6 +27,7 @@ retry-requests>=2.0.0
 
 # File processing and utilities
 filelock>=3.12.0
+loaden>=0.1.0
 pathlib-shim>=1.1.0
 
 # Development and testing

@@ -11,8 +11,9 @@ import torchaudio
 import torchaudio.transforms as T
 import numpy as np
 import argparse
-import yaml
 import sqlite3
+
+from config_utils import load_config
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description="Calculate global min/max for spectrograms")
@@ -54,8 +55,7 @@ def main():
     db_path = "audiomoth.db"
     
     # Load config
-    with open(args.config, 'r') as file:
-        config = yaml.safe_load(file)
+    config = load_config(args.config)
     
     # Setup GPU
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

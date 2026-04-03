@@ -15,7 +15,6 @@ Usage:
 import argparse
 import os
 import sys
-import yaml
 import sqlite3
 import numpy as np
 import pandas as pd
@@ -24,6 +23,7 @@ import seaborn as sns
 from datetime import datetime, timedelta
 from pathlib import Path
 from audio_database import AudioDatabase
+from config_utils import load_config
 
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TimeElapsedColumn
@@ -47,8 +47,7 @@ class ConfigLoader:
     def _load_config(self):
         """Load configuration from YAML file."""
         try:
-            with open(self.config_path, 'r') as f:
-                return yaml.safe_load(f)
+            return load_config(self.config_path)
         except Exception as e:
             raise ValueError(f"Failed to load config from {self.config_path}: {e}")
     

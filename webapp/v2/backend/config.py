@@ -4,19 +4,24 @@ Configuration management for AudioMoth Spectrogram Viewer
 """
 
 import argparse
-import yaml
+import sys
+import os
+from pathlib import Path
 from typing import Dict, Any
+
+# Reach repo root so config_utils is importable
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+from config_utils import load_config as _load_config_base
 
 
 def load_config(config_path: str) -> Dict[str, Any]:
     """Load configuration from YAML file."""
     try:
-        with open(config_path, 'r') as file:
-            return yaml.safe_load(file)
+        return _load_config_base(config_path)
     except FileNotFoundError:
         raise FileNotFoundError(f"Configuration file not found: {config_path}")
-    except yaml.YAMLError as e:
-        raise ValueError(f"Invalid YAML configuration: {e}")
+    except Exception as e:
+        raise ValueError(f"Invalid configuration: {e}")
 
 
 def setup_cli() -> argparse.Namespace:

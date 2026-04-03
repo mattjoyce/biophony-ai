@@ -1,0 +1,92 @@
+input_directory : "~/Documents/audiosearch/test"
+database_path : "~/Documents/audiosearch/test/audiomoth.db"
+
+# Audio parameters
+# Device: AudioMoth 243B1F0663FAA6CC, Firmware 1.11.0
+# Recording duration 600s, sleep 600s, gain medium
+sample_rate: 48000
+file_duration_sec: 600
+
+# Display parameters
+width-px : 1000
+height-px : 300
+border-px : 0
+dpi : 100
+
+# Spectrogram parameters
+n_fft : 2048
+hop_length : 256
+n_mels : 128
+
+# Global contrast normalization range
+global_min : -40
+global_max : 40
+
+# Acoustic indices configuration - STANDARD INDICES ONLY
+acoustic_indices:
+  temporal:
+    chunk_duration_sec: 4.5
+    temporal_entropy:
+      processor: temporal_entropy
+      params: {}
+
+    temporal_activity:
+      processor: temporal_activity
+      params: {}
+
+    temporal_median:
+      processor: temporal_median
+      params: {}
+
+  spectral:
+    chunk_duration_sec: 4.5
+
+    acoustic_complexity_index:
+      processor: acoustic_complexity_index
+      params: {}
+
+    standard_bai_500-2000:
+      processor: bioacoustics_index
+      params:
+        freq_min: 500
+        freq_max: 2000
+
+    standard_soundscape_500-2000:
+      processor: soundscape_index
+      params:
+        bioacoustic_freq_min: 500
+        bioacoustic_freq_max: 2000
+        anthropogenic_freq_min: 0
+        anthropogenic_freq_max: 500
+
+    spectral_entropy:
+      processor: spectral_entropy
+      params: {}
+
+    frequency_entropy:
+      processor: frequency_entropy
+      params: {}
+
+    # Green and Golden Bell Frog (Litoria aurea) - validated detection profile
+    # Nocturnal caller, distinctive "craw-awk" growl, 1200-2500 Hz
+    green_golden_bell_frog_bai:
+      processor: bioacoustics_index
+      params:
+        freq_min: 1200
+        freq_max: 2500
+
+    litoria_aurea_soundscape:
+      processor: soundscape_index
+      params:
+        bioacoustic_freq_min: 1200
+        bioacoustic_freq_max: 2500
+        anthropogenic_freq_min: 0
+        anthropogenic_freq_max: 800
+
+    acoustic_evenness_index:
+      processor: acoustic_eveness_index
+      params: {}
+
+    acoustic_diversity_index:
+      processor: acoustic_diversity_index
+      params: {}

@@ -14,11 +14,11 @@ from pathlib import Path
 
 import numpy as np
 import torch
-import torchaudio
+import soundfile as sf
 import torchaudio.transforms as T
-import yaml
 from filelock import FileLock, Timeout
 
+from config_utils import load_config
 from spectrogram_utils import (create_linear_frequency_vector, create_time_vector,
                                find_all_wav_files, save_spectrogram,
                                get_spectrogram_path_cross_platform)
@@ -64,11 +64,6 @@ def parse_arguments():
 
     return parser.parse_args()
 
-
-def load_config(config_path):
-    """Load configuration from YAML file"""
-    with open(config_path, "r") as file:
-        return yaml.safe_load(file)
 
 
 def setup_gpu():
@@ -284,8 +279,8 @@ def process_single_file(
 
     try:
         # Load audio and move to GPU
-        waveform, sample_rate = torchaudio.load(audio_file)
-        waveform = waveform.to(device)
+        audio_data, sample_rate = sf.read(audio_file, always_2d=True)
+        waveform = torch.from_numpy(audio_data.T).float().to(device)
 
         # Generate linear spectrogram on GPU
         linear_spec = spectrogram_transform(waveform)

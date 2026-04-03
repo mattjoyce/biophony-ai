@@ -4,7 +4,7 @@ Temporal Indices Processor
 Processes WAV files to compute temporal domain acoustic indices
 """
 
-import torchaudio
+import soundfile as sf
 import numpy as np
 from pathlib import Path
 from typing import Dict, List, Any
@@ -79,23 +79,19 @@ class TemporalIndicesProcessor(AcousticIndex):
             raise ValueError(f"File is not a WAV file: {wav_file}")
         
         # Load audio and validate properties
-        waveform, sample_rate = torchaudio.load(wav_file)
-        
+        audio_data, sample_rate = sf.read(wav_file, always_2d=True)
+
         if sample_rate != self.sample_rate:
             raise ValueError(f"Sample rate mismatch: {sample_rate} != {self.sample_rate}")
+
+        audio = audio_data.mean(axis=1)
         
-        # Convert to mono if needed
-        if waveform.shape[0] > 1:
-            waveform = waveform.mean(dim=0, keepdim=True)
-        
-        audio = waveform.squeeze().numpy()
-        
-        # Validate duration with tolerance
+        # Validate duration — only reject files longer than expected (config mismatch)
+        # Shorter files are legitimate: first/last recordings in a deployment
         duration_sec = len(audio) / sample_rate
         tolerance_sec = 2.0
-        if abs(duration_sec - self.file_duration_sec) > tolerance_sec:
-            print(f"  ⚠️  Skipping file: duration {duration_sec}s outside tolerance ±{tolerance_sec}s of expected {self.file_duration_sec}s")
-            # Return special marker to indicate file should be marked as skipped
+        if duration_sec > self.file_duration_sec + tolerance_sec:
+            print(f"  ⚠️  Skipping file: duration {duration_sec}s exceeds expected {self.file_duration_sec}s + {tolerance_sec}s tolerance")
             return {'_skipped': True, 'reason': f'duration_{duration_sec}s', 'filepath': str(wav_path)}
         
         # Adjust chunk count for shorter files within tolerance

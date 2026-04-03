@@ -12,7 +12,6 @@ from pathlib import Path
 from typing import List
 
 import torch
-import yaml
 from filelock import FileLock, Timeout
 from rich.console import Console
 from rich.progress import Progress, TaskID, SpinnerColumn, BarColumn, TextColumn, TimeRemainingColumn, MofNCompleteColumn
@@ -22,6 +21,7 @@ from rich.text import Text
 from rich.rule import Rule
 from rich import box
 
+from config_utils import load_config
 from indices import DatabaseManager, SpectralIndicesProcessor, TemporalIndicesProcessor
 from spectrogram_utils import find_all_wav_files
 
@@ -71,13 +71,11 @@ def parse_arguments():
     return parser.parse_args()
 
 
-def load_config(config_path: str) -> dict:
-    """Load configuration from YAML file and store config in database"""
+def load_and_store_config(config_path: str) -> dict:
+    """Load configuration and store it in the database for reference."""
     with console.status(f"[bold blue]Loading configuration from {config_path}..."):
-        with open(config_path, "r") as file:
-            config = yaml.safe_load(file)
+        config = load_config(config_path)
 
-    # Store configuration in database for future reference
     try:
         config_name = os.path.basename(config_path)
         db_manager = DatabaseManager(config.get("database_path", "audiomoth.db"), config=config)
@@ -531,7 +529,7 @@ def main():
     processing_type = "temporal" if args.TEMPORAL else "spectral"
 
     # Setup
-    config = load_config(args.config)
+    config = load_and_store_config(args.config)
 
     # Determine input directory: use --input if provided, otherwise fall back to config
     if args.input:

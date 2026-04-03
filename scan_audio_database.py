@@ -7,11 +7,11 @@ Scans directories for WAV files and populates database with AudioMoth metadata
 import os
 import sys
 import argparse
-import yaml
 import sqlite3
 from pathlib import Path
 from filelock import FileLock, Timeout
 from audio_database import AudioDatabase
+from config_utils import load_config
 
 
 def parse_arguments():
@@ -34,12 +34,6 @@ def parse_arguments():
     mode_group.add_argument("--stats", action="store_true", help="Show database statistics only")
     
     return parser.parse_args()
-
-
-def load_config(config_path):
-    """Load configuration from YAML file"""
-    with open(config_path, 'r') as file:
-        return yaml.safe_load(file)
 
 
 def create_dry_run_report(mode, config, input_directory):
@@ -209,13 +203,6 @@ def main():
     
     # Initialize database - this will fail if database_path is wrong
     print(f"Database: {db_path}")
-    
-    # Check if database file exists for operations that require existing database
-    db_file = Path(db_path) 
-    if mode not in ["stats", "init"] and not db_file.exists():
-        print(f"❌ Database file not found: {db_path}")
-        print("💡 Create database first by running this script with --init")
-        return
     
     db = AudioDatabase(db_path, config=config)
     
